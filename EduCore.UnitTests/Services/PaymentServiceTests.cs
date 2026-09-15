@@ -343,7 +343,6 @@ namespace EduCore.UnitTests.Services
             var request = new UpdatePaymentRequest
             {
                 Amount = 3000,
-                PaymentDate = DateOnly.FromDateTime(DateTime.UtcNow),
                 PaymentMethod = PaymentMethod.Cash,
                 Notes = "Updated payment"
             };
@@ -380,6 +379,15 @@ namespace EduCore.UnitTests.Services
             _unitOfWorkMock.Setup(x => x.BeginTransactionAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
             _unitOfWorkMock.Setup(x => x.CommitTransactionAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
             _unitOfWorkMock.Setup(x => x.SaveChangesAsync(It.IsAny<CancellationToken>())).Returns(Task.FromResult(1));
+
+            _mapperMock
+                .Setup(x => x.Map(request, existingPayment))
+                .Callback<UpdatePaymentRequest, Payment>((src, dest) =>
+                {
+                    dest.Amount = src.Amount;
+                    dest.PaymentMethod = src.PaymentMethod;
+                    dest.Notes = src.Notes;
+                });
 
             _mapperMock
                 .Setup(x => x.Map<PaymentResponse>(existingPayment))
