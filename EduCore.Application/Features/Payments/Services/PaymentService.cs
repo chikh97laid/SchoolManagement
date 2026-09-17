@@ -24,27 +24,24 @@ namespace EduCore.Application.Features.Payments.Services
         public async Task<PaymentResponse> CreateAsync(CreatePaymentRequest request,
                          CancellationToken cancellationToken = default)
         {
-
-            var fee = await _unitOfWork.StudentFees
-            .FirstOrDefaultAsync(
-                x => (x.Id == request.StudentFeeId && !x.IsDeleted),
-                true,
-                cancellationToken);
-
-            if (fee is null)
-                throw new NotFoundException(ErrorCodes.StudentFee.NotFound);
-
-            var remainingAmount = fee.TotalAmount - fee.PaidAmount;
-
-            if (request.Amount > remainingAmount)
-            {
-                throw new BadRequestException(ErrorCodes.Payment.InvalidAmount);
-            }
-
             await _unitOfWork.BeginTransactionAsync(cancellationToken);
 
             try
             {
+                var fee = await _unitOfWork.StudentFees
+                    .GetForUpdateAsync(
+                        request.StudentFeeId,
+                        cancellationToken);
+
+                if (fee is null)
+                    throw new NotFoundException(ErrorCodes.StudentFee.NotFound);
+
+                var remainingAmount = fee.TotalAmount - fee.PaidAmount;
+
+                if (request.Amount > remainingAmount)
+                {
+                    throw new BadRequestException(ErrorCodes.Payment.InvalidAmount);
+                }
 
                 var payment = _mapper.Map<Payment>(request);
 
@@ -135,45 +132,50 @@ namespace EduCore.Application.Features.Payments.Services
         UpdatePaymentRequest request,
         CancellationToken cancellationToken = default)
         {
-
-            var payment = await _unitOfWork.Payments
-            .FirstOrDefaultAsync(
-            x => x.Id == id && !x.IsDeleted,
-            trackChanges: true,
-            cancellationToken: cancellationToken);
-
-            if (payment is null)
-                throw new NotFoundException(ErrorCodes.Payment.NotFound);
-
-            var fee = await _unitOfWork.StudentFees
-                .FirstOrDefaultAsync(
-                    x => x.Id == payment.StudentFeeId
-                         && !x.IsDeleted,
-                    trackChanges: true,
-                    cancellationToken: cancellationToken);
-
-            if (fee is null)
-                throw new NotFoundException(ErrorCodes.StudentFee.NotFound);
-
-            if (payment.Status == PaymentStatus.Cancelled)
-                throw new BadRequestException(ErrorCodes.Payment.CannotUpdateCancelled);
-
-            // PaidAmount currently includes the old payment.
-            // Remove it first.
-            var paidWithoutCurrentPayment = fee.PaidAmount - payment.Amount;
-
-            var newPaidAmount = paidWithoutCurrentPayment + request.Amount;
-
-            if (newPaidAmount > fee.TotalAmount)
-            {
-                throw new BadRequestException(ErrorCodes.Payment.InvalidAmount);
-            }
-
-
             await _unitOfWork.BeginTransactionAsync(cancellationToken);
 
             try
             {
+                var paymentReference = await _unitOfWork.Payments
+                    .FirstOrDefaultAsync(
+                        x => x.Id == id && !x.IsDeleted,
+                        trackChanges: false,
+                        cancellationToken: cancellationToken);
+
+                if (paymentReference is null)
+                    throw new NotFoundException(ErrorCodes.Payment.NotFound);
+
+                var fee = await _unitOfWork.StudentFees
+                    .GetForUpdateAsync(
+                        paymentReference.StudentFeeId,
+                        cancellationToken);
+
+                if (fee is null)
+                    throw new NotFoundException(ErrorCodes.StudentFee.NotFound);
+
+                var payment = await _unitOfWork.Payments
+                    .FirstOrDefaultAsync(
+                        x => x.Id == id && !x.IsDeleted,
+                        trackChanges: true,
+                        cancellationToken: cancellationToken);
+
+                if (payment is null)
+                    throw new NotFoundException(ErrorCodes.Payment.NotFound);
+
+                if (payment.Status == PaymentStatus.Cancelled)
+                    throw new BadRequestException(ErrorCodes.Payment.CannotUpdateCancelled);
+
+                // PaidAmount currently includes the old payment.
+                // Remove it first.
+                var paidWithoutCurrentPayment = fee.PaidAmount - payment.Amount;
+
+                var newPaidAmount = paidWithoutCurrentPayment + request.Amount;
+
+                if (newPaidAmount > fee.TotalAmount)
+                {
+                    throw new BadRequestException(ErrorCodes.Payment.InvalidAmount);
+                }
+
                 _mapper.Map(request, payment);
 
                 fee.PaidAmount = newPaidAmount;
@@ -198,38 +200,43 @@ namespace EduCore.Application.Features.Payments.Services
         int id,
         CancellationToken cancellationToken = default)
         {
-
-            var payment = await _unitOfWork.Payments
-            .FirstOrDefaultAsync(
-                x => x.Id == id && !x.IsDeleted,
-                trackChanges: true,
-                cancellationToken: cancellationToken);
-
-            if (payment is null)
-                throw new NotFoundException(ErrorCodes.Payment.NotFound);
-
-            if (payment.Status == PaymentStatus.Cancelled)
-                throw new BadRequestException(ErrorCodes.Payment.CannotUpdateCancelled);
-
-            var fee = await _unitOfWork.StudentFees
-                .FirstOrDefaultAsync(
-                    x => x.Id == payment.StudentFeeId
-                         && !x.IsDeleted,
-                    trackChanges: true,
-                    cancellationToken: cancellationToken);
-
-            if (fee is null)
-                throw new NotFoundException(ErrorCodes.StudentFee.NotFound);
-
-            if (payment.Amount > fee.PaidAmount)
-            {
-                throw new BadRequestException(ErrorCodes.Payment.InvalidAmount);
-            }
-
             await _unitOfWork.BeginTransactionAsync(cancellationToken);
 
             try
             {
+                var paymentReference = await _unitOfWork.Payments
+                    .FirstOrDefaultAsync(
+                        x => x.Id == id && !x.IsDeleted,
+                        trackChanges: false,
+                        cancellationToken: cancellationToken);
+
+                if (paymentReference is null)
+                    throw new NotFoundException(ErrorCodes.Payment.NotFound);
+
+                var fee = await _unitOfWork.StudentFees
+                    .GetForUpdateAsync(
+                        paymentReference.StudentFeeId,
+                        cancellationToken);
+
+                if (fee is null)
+                    throw new NotFoundException(ErrorCodes.StudentFee.NotFound);
+
+                var payment = await _unitOfWork.Payments
+                    .FirstOrDefaultAsync(
+                        x => x.Id == id && !x.IsDeleted,
+                        trackChanges: true,
+                        cancellationToken: cancellationToken);
+
+                if (payment is null)
+                    throw new NotFoundException(ErrorCodes.Payment.NotFound);
+
+                if (payment.Status == PaymentStatus.Cancelled)
+                    throw new BadRequestException(ErrorCodes.Payment.CannotUpdateCancelled);
+
+                if (payment.Amount > fee.PaidAmount)
+                {
+                    throw new BadRequestException(ErrorCodes.Payment.InvalidAmount);
+                }
 
                 // Cancel the payment
                 payment.Status = PaymentStatus.Cancelled;

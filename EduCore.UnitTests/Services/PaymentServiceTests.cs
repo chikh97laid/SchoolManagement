@@ -77,6 +77,12 @@ namespace EduCore.UnitTests.Services
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync(fee);
 
+            _unitOfWorkMock
+                .Setup(x => x.StudentFees.GetForUpdateAsync(
+                    It.IsAny<int>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(fee);
+
 
             // Act
             var act = () => _service.CreateAsync(
@@ -110,6 +116,12 @@ namespace EduCore.UnitTests.Services
                 .Setup(x => x.StudentFees.FirstOrDefaultAsync(
                     It.IsAny<Expression<Func<StudentFee, bool>>>(),
                     true,
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(fee);
+
+            _unitOfWorkMock
+                .Setup(x => x.StudentFees.GetForUpdateAsync(
+                    It.IsAny<int>(),
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync(fee);
 
@@ -163,6 +175,12 @@ namespace EduCore.UnitTests.Services
                 .Setup(x => x.StudentFees.FirstOrDefaultAsync(
                     It.IsAny<Expression<Func<StudentFee, bool>>>(),
                     true,
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(fee);
+
+            _unitOfWorkMock
+                .Setup(x => x.StudentFees.GetForUpdateAsync(
+                    It.IsAny<int>(),
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync(fee);
 
@@ -235,7 +253,7 @@ namespace EduCore.UnitTests.Services
             _unitOfWorkMock
                 .Setup(x => x.Payments.FirstOrDefaultAsync(
                     It.IsAny<Expression<Func<Payment, bool>>>(),
-                    true,
+                    It.IsAny<bool>(),
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync(existingPayment);
 
@@ -272,7 +290,7 @@ namespace EduCore.UnitTests.Services
             _unitOfWorkMock
                 .Setup(x => x.Payments.FirstOrDefaultAsync(
                     It.IsAny<Expression<Func<Payment, bool>>>(),
-                    true,
+                    It.IsAny<bool>(),
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync(existingPayment);
 
@@ -280,6 +298,12 @@ namespace EduCore.UnitTests.Services
                 .Setup(x => x.StudentFees.FirstOrDefaultAsync(
                     It.IsAny<Expression<Func<StudentFee, bool>>>(),
                     true,
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(existingFee);
+
+            _unitOfWorkMock
+                .Setup(x => x.StudentFees.GetForUpdateAsync(
+                    It.IsAny<int>(),
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync(existingFee);
 
@@ -317,7 +341,7 @@ namespace EduCore.UnitTests.Services
             _unitOfWorkMock
                 .Setup(x => x.Payments.FirstOrDefaultAsync(
                     It.IsAny<Expression<Func<Payment, bool>>>(),
-                    true,
+                    It.IsAny<bool>(),
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync(payment);
 
@@ -325,6 +349,12 @@ namespace EduCore.UnitTests.Services
                 .Setup(x => x.StudentFees.FirstOrDefaultAsync(
                     It.IsAny<Expression<Func<StudentFee, bool>>>(),
                     true,
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(fee);
+
+            _unitOfWorkMock
+                .Setup(x => x.StudentFees.GetForUpdateAsync(
+                    It.IsAny<int>(),
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync(fee);
 
@@ -365,7 +395,7 @@ namespace EduCore.UnitTests.Services
             _unitOfWorkMock
                 .Setup(x => x.Payments.FirstOrDefaultAsync(
                     It.IsAny<Expression<Func<Payment, bool>>>(),
-                    true,
+                    It.IsAny<bool>(),
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync(existingPayment);
 
@@ -373,6 +403,12 @@ namespace EduCore.UnitTests.Services
                 .Setup(x => x.StudentFees.FirstOrDefaultAsync(
                     It.IsAny<Expression<Func<StudentFee, bool>>>(),
                     true,
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(existingFee);
+
+            _unitOfWorkMock
+                .Setup(x => x.StudentFees.GetForUpdateAsync(
+                    It.IsAny<int>(),
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync(existingFee);
 
@@ -418,7 +454,7 @@ namespace EduCore.UnitTests.Services
             _unitOfWorkMock
                 .Setup(x => x.Payments.FirstOrDefaultAsync(
                     It.IsAny<Expression<Func<Payment, bool>>>(),
-                    true,
+                    It.IsAny<bool>(),
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync(existingPayment);
 
@@ -426,6 +462,12 @@ namespace EduCore.UnitTests.Services
                 .Setup(x => x.StudentFees.FirstOrDefaultAsync(
                     It.IsAny<Expression<Func<StudentFee, bool>>>(),
                     true,
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(existingFee);
+
+            _unitOfWorkMock
+                .Setup(x => x.StudentFees.GetForUpdateAsync(
+                    It.IsAny<int>(),
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync(existingFee);
 

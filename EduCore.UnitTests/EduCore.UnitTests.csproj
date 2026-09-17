@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\EduCore.Application\EduCore.Application.csproj" />
+    <ProjectReference Include="..\EduCore.Persistence\EduCore.Persistence.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -13,6 +13,24 @@ public class StudentFeeRepository
     {
     }
 
+    public async Task<StudentFee?> GetForUpdateAsync(
+        int id,
+        CancellationToken cancellationToken = default)
+    {
+        var fees = await _context.StudentFees
+            .FromSqlInterpolated($"""
+                SELECT *
+                FROM "StudentFees"
+                WHERE "Id" = {id}
+                AND NOT "IsDeleted"
+                FOR UPDATE
+                """)
+            .AsTracking()
+            .ToListAsync(cancellationToken);
+
+        return fees.SingleOrDefault();
+    }
+
     public async Task<IEnumerable<StudentFee>> GetAllWithDetailsAsync(CancellationToken cancellationToken = default)
     {
         return await _context.StudentFees
