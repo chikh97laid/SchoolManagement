@@ -1,5 +1,6 @@
 ﻿using AutoMapper;
 using EduCore.Application.Common.Exceptions;
+using EduCore.Application.Common.Interfaces;
 using EduCore.Application.Features.StudentFees.DTOs;
 using EduCore.Application.Features.StudentFees.Interfaces;
 using EduCore.Domain.Entities;
@@ -12,13 +13,34 @@ public class StudentFeeService : IStudentFeeService
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IMapper _mapper;
+    private readonly ICurrentUserService _currentUserService;
 
     public StudentFeeService(
         IUnitOfWork unitOfWork,
-        IMapper mapper)
+        IMapper mapper,
+        ICurrentUserService currentUserService)
     {
         _unitOfWork = unitOfWork;
         _mapper = mapper;
+        _currentUserService = currentUserService;
+    }
+
+    private async Task<int?> ResolveCurrentTeacherIdAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!_currentUserService.IsAuthenticated ||
+            _currentUserService.UserId == Guid.Empty)
+        {
+            return null;
+        }
+
+        var teacher = await _unitOfWork.Teachers
+            .FirstOrDefaultAsync(
+                x => x.UserId == _currentUserService.UserId && !x.IsDeleted,
+                false,
+                cancellationToken);
+
+        return teacher?.Id;
     }
 
     public async Task<StudentFeeResponse> CreateAsync(
@@ -62,10 +84,31 @@ public class StudentFeeService : IStudentFeeService
         int id,
         CancellationToken cancellationToken = default)
     {
-        var fee = await _unitOfWork.StudentFees
-            .GetWithDetailsAsync(
-                id,
-                cancellationToken);
+        var currentTeacherId = await ResolveCurrentTeacherIdAsync(cancellationToken);
+
+        StudentFee? fee;
+
+        if (currentTeacherId.HasValue)
+        {
+            fee = await _unitOfWork.StudentFees
+                .FirstOrDefaultAsync(
+                    x => x.Id == id
+                        && !x.IsDeleted
+                        && x.Enrollment.Group.TeacherId == currentTeacherId.Value,
+                    false,
+                    cancellationToken,
+                    x => x.Enrollment,
+                    x => x.Enrollment.Student,
+                    x => x.Enrollment.Group,
+                    x => x.Enrollment.Group.Teacher);
+        }
+        else
+        {
+            fee = await _unitOfWork.StudentFees
+                .GetWithDetailsAsync(
+                    id,
+                    cancellationToken);
+        }
 
         if (fee is null || fee.IsDeleted)
             throw new NotFoundException(ErrorCodes.StudentFee.NotFound);

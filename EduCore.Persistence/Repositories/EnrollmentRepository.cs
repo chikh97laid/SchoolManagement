@@ -16,6 +16,7 @@ namespace EduCore.Persistence.Repositories
         public async Task<IEnumerable<Enrollment>> GetAllWithDetailsAsync(CancellationToken cancellationToken = default)
         {
             return await _context.Enrollments
+                .Where(x => !x.IsDeleted)
                 .Include(x => x.Student)
                 .Include(x => x.Group)
                     .ThenInclude(x => x.Teacher)
@@ -30,7 +31,7 @@ namespace EduCore.Persistence.Repositories
                 .Include(x => x.Group)
                     .ThenInclude(x => x.Teacher)
                 .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+                .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken);
         }
     }
 }

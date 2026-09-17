@@ -1,5 +1,6 @@
 ﻿using AutoMapper;
 using EduCore.Application.Common.Exceptions;
+using EduCore.Application.Common.Interfaces;
 using EduCore.Application.Features.Groups.DTOs;
 using EduCore.Application.Features.Groups.Interfaces;
 using EduCore.Domain.Interfaces.Repositories;
@@ -12,13 +13,34 @@ public class GroupService : IGroupService
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IMapper _mapper;
+    private readonly ICurrentUserService _currentUserService;
 
     public GroupService(
         IUnitOfWork unitOfWork,
-        IMapper mapper)
+        IMapper mapper,
+        ICurrentUserService currentUserService)
     {
         _unitOfWork = unitOfWork;
         _mapper = mapper;
+        _currentUserService = currentUserService;
+    }
+
+    private async Task<int?> ResolveCurrentTeacherIdAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!_currentUserService.IsAuthenticated ||
+            _currentUserService.UserId == Guid.Empty)
+        {
+            return null;
+        }
+
+        var teacher = await _unitOfWork.Teachers
+            .FirstOrDefaultAsync(
+                x => x.UserId == _currentUserService.UserId && !x.IsDeleted,
+                false,
+                cancellationToken);
+
+        return teacher?.Id;
     }
 
     public async Task<GroupResponse> CreateAsync(
@@ -52,12 +74,28 @@ public class GroupService : IGroupService
         int id,
         CancellationToken cancellationToken = default)
     {
-        var group = await _unitOfWork.Groups
-            .FirstOrDefaultAsync(
-                x => x.Id == id && !x.IsDeleted,
-                false,
-                cancellationToken,
-                x => x.Teacher);
+        var currentTeacherId = await ResolveCurrentTeacherIdAsync(cancellationToken);
+
+        Group? group;
+
+        if (currentTeacherId.HasValue)
+        {
+            group = await _unitOfWork.Groups
+                .FirstOrDefaultAsync(
+                    x => x.Id == id && !x.IsDeleted && x.TeacherId == currentTeacherId.Value,
+                    false,
+                    cancellationToken,
+                    x => x.Teacher);
+        }
+        else
+        {
+            group = await _unitOfWork.Groups
+                .FirstOrDefaultAsync(
+                    x => x.Id == id && !x.IsDeleted,
+                    false,
+                    cancellationToken,
+                    x => x.Teacher);
+        }
 
         if (group is null)
             throw new NotFoundException(ErrorCodes.Group.NotFound);
@@ -68,12 +106,28 @@ public class GroupService : IGroupService
     public async Task<IEnumerable<GroupResponse>> GetAllAsync(
         CancellationToken cancellationToken = default)
     {
-        var groups = await _unitOfWork.Groups
-            .FindAsync(
-                x => !x.IsDeleted,
-                false,
-                cancellationToken,
-                x => x.Teacher);
+        var currentTeacherId = await ResolveCurrentTeacherIdAsync(cancellationToken);
+
+        IEnumerable<Group> groups;
+
+        if (currentTeacherId.HasValue)
+        {
+            groups = await _unitOfWork.Groups
+                .FindAsync(
+                    x => !x.IsDeleted && x.TeacherId == currentTeacherId.Value,
+                    false,
+                    cancellationToken,
+                    x => x.Teacher);
+        }
+        else
+        {
+            groups = await _unitOfWork.Groups
+                .FindAsync(
+                    x => !x.IsDeleted,
+                    false,
+                    cancellationToken,
+                    x => x.Teacher);
+        }
 
         return _mapper.Map<IEnumerable<GroupResponse>>(groups);
     }
