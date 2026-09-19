@@ -7,4 +7,6 @@ public interface ICurrentUserService
     string? UserName { get; }
 
     bool IsAuthenticated { get; }
+
+    bool IsAdmin { get; }
 }

@@ -106,44 +106,56 @@ public class EnrollmentService : IEnrollmentService
         int id,
         CancellationToken cancellationToken = default)
     {
-        var currentTeacherId = await ResolveCurrentTeacherIdAsync(cancellationToken);
-
-        Enrollment? enrollment;
-
-        if (currentTeacherId.HasValue)
+        if (_currentUserService.IsAdmin)
         {
-            enrollment = await _unitOfWork.Enrollments
+            var enrollment = await _unitOfWork.Enrollments
                 .FirstOrDefaultAsync(
-                    x => x.Id == id
-                        && !x.IsDeleted
-                        && x.Group.TeacherId == currentTeacherId.Value,
+                    x => x.Id == id && !x.IsDeleted,
                     false,
                     cancellationToken,
                     x => x.Student,
                     x => x.Group,
                     x => x.Group.Teacher);
-        }
-        else
-        {
-            enrollment = await _unitOfWork.Enrollments
-                .GetWithDetailsAsync(
-                    id,
-                    cancellationToken);
+
+            if (enrollment is null)
+            {
+                throw new NotFoundException(ErrorCodes.Enrollment.NotFound);
+            }
+
+            return _mapper.Map<EnrollmentResponse>(enrollment);
         }
 
-        if (enrollment is null)
+        var currentTeacherId = await ResolveCurrentTeacherIdAsync(cancellationToken);
+
+        if (currentTeacherId is null)
+        {
+            throw new NotFoundException(ErrorCodes.Enrollment.NotFound);
+        }
+
+        var teacherEnrollment = await _unitOfWork.Enrollments
+            .FirstOrDefaultAsync(
+                x => x.Id == id
+                    && !x.IsDeleted
+                    && x.Group.TeacherId == currentTeacherId.Value,
+                false,
+                cancellationToken,
+                x => x.Student,
+                x => x.Group,
+                x => x.Group.Teacher);
+
+        if (teacherEnrollment is null)
         {
             throw new NotFoundException(ErrorCodes.Enrollment.NotFound);
         }
 
         // Group.Teacher is needed by the response mapping.
-        if (enrollment.Group.Teacher is null)
+        if (teacherEnrollment.Group.Teacher is null)
         {
             throw new BadRequestException(ErrorCodes.Group.GroupNoTeacher);
         }
 
         return _mapper.Map<EnrollmentResponse>(
-            enrollment);
+            teacherEnrollment);
     }
 
     public async Task<IEnumerable<EnrollmentResponse>> GetAllAsync(

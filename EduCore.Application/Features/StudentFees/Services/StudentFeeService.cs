@@ -84,36 +84,47 @@ public class StudentFeeService : IStudentFeeService
         int id,
         CancellationToken cancellationToken = default)
     {
-        var currentTeacherId = await ResolveCurrentTeacherIdAsync(cancellationToken);
-
-        StudentFee? fee;
-
-        if (currentTeacherId.HasValue)
+        if (_currentUserService.IsAdmin)
         {
-            fee = await _unitOfWork.StudentFees
+            var fee = await _unitOfWork.StudentFees
                 .FirstOrDefaultAsync(
-                    x => x.Id == id
-                        && !x.IsDeleted
-                        && x.Enrollment.Group.TeacherId == currentTeacherId.Value,
+                    x => x.Id == id && !x.IsDeleted,
                     false,
                     cancellationToken,
                     x => x.Enrollment,
                     x => x.Enrollment.Student,
                     x => x.Enrollment.Group,
                     x => x.Enrollment.Group.Teacher);
-        }
-        else
-        {
-            fee = await _unitOfWork.StudentFees
-                .GetWithDetailsAsync(
-                    id,
-                    cancellationToken);
+
+            if (fee is null || fee.IsDeleted)
+                throw new NotFoundException(ErrorCodes.StudentFee.NotFound);
+
+            return _mapper.Map<StudentFeeResponse>(fee);
         }
 
-        if (fee is null || fee.IsDeleted)
+        var currentTeacherId = await ResolveCurrentTeacherIdAsync(cancellationToken);
+
+        if (currentTeacherId is null)
+        {
+            throw new NotFoundException(ErrorCodes.StudentFee.NotFound);
+        }
+
+        var teacherFee = await _unitOfWork.StudentFees
+            .FirstOrDefaultAsync(
+                x => x.Id == id
+                    && !x.IsDeleted
+                    && x.Enrollment.Group.TeacherId == currentTeacherId.Value,
+                false,
+                cancellationToken,
+                x => x.Enrollment,
+                x => x.Enrollment.Student,
+                x => x.Enrollment.Group,
+                x => x.Enrollment.Group.Teacher);
+
+        if (teacherFee is null || teacherFee.IsDeleted)
             throw new NotFoundException(ErrorCodes.StudentFee.NotFound);
 
-        return _mapper.Map<StudentFeeResponse>(fee);
+        return _mapper.Map<StudentFeeResponse>(teacherFee);
     }
 
     public async Task<IEnumerable<StudentFeeResponse>> GetAllAsync(

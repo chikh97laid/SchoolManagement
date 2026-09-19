@@ -288,5 +288,7 @@ public class PaymentConcurrencyIntegrationTests
         public string? UserName => null;
 
         public bool IsAuthenticated => false;
+
+        public bool IsAdmin => false;
     }
 }

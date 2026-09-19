@@ -74,62 +74,73 @@ public class GroupService : IGroupService
         int id,
         CancellationToken cancellationToken = default)
     {
-        var currentTeacherId = await ResolveCurrentTeacherIdAsync(cancellationToken);
-
-        Group? group;
-
-        if (currentTeacherId.HasValue)
+        if (_currentUserService.IsAdmin)
         {
-            group = await _unitOfWork.Groups
-                .FirstOrDefaultAsync(
-                    x => x.Id == id && !x.IsDeleted && x.TeacherId == currentTeacherId.Value,
-                    false,
-                    cancellationToken,
-                    x => x.Teacher);
-        }
-        else
-        {
-            group = await _unitOfWork.Groups
+            var group = await _unitOfWork.Groups
                 .FirstOrDefaultAsync(
                     x => x.Id == id && !x.IsDeleted,
                     false,
                     cancellationToken,
                     x => x.Teacher);
+
+            if (group is null)
+                throw new NotFoundException(ErrorCodes.Group.NotFound);
+
+            return _mapper.Map<GroupResponse>(group);
         }
 
-        if (group is null)
+        var currentTeacherId = await ResolveCurrentTeacherIdAsync(cancellationToken);
+
+        if (currentTeacherId is null)
+        {
+            throw new NotFoundException(ErrorCodes.Group.NotFound);
+        }
+
+        var teacherGroup = await _unitOfWork.Groups
+            .FirstOrDefaultAsync(
+                x => x.Id == id
+                    && !x.IsDeleted
+                    && x.TeacherId == currentTeacherId.Value,
+                false,
+                cancellationToken,
+                x => x.Teacher);
+
+        if (teacherGroup is null)
             throw new NotFoundException(ErrorCodes.Group.NotFound);
 
-        return _mapper.Map<GroupResponse>(group);
+        return _mapper.Map<GroupResponse>(teacherGroup);
     }
 
     public async Task<IEnumerable<GroupResponse>> GetAllAsync(
         CancellationToken cancellationToken = default)
     {
-        var currentTeacherId = await ResolveCurrentTeacherIdAsync(cancellationToken);
-
-        IEnumerable<Group> groups;
-
-        if (currentTeacherId.HasValue)
+        if (_currentUserService.IsAdmin)
         {
-            groups = await _unitOfWork.Groups
-                .FindAsync(
-                    x => !x.IsDeleted && x.TeacherId == currentTeacherId.Value,
-                    false,
-                    cancellationToken,
-                    x => x.Teacher);
-        }
-        else
-        {
-            groups = await _unitOfWork.Groups
+            var groups = await _unitOfWork.Groups
                 .FindAsync(
                     x => !x.IsDeleted,
                     false,
                     cancellationToken,
                     x => x.Teacher);
+
+            return _mapper.Map<IEnumerable<GroupResponse>>(groups);
         }
 
-        return _mapper.Map<IEnumerable<GroupResponse>>(groups);
+        var currentTeacherId = await ResolveCurrentTeacherIdAsync(cancellationToken);
+
+        if (currentTeacherId is null)
+        {
+            return [];
+        }
+
+        var teacherGroups = await _unitOfWork.Groups
+            .FindAsync(
+                x => !x.IsDeleted && x.TeacherId == currentTeacherId.Value,
+                false,
+                cancellationToken,
+                x => x.Teacher);
+
+        return _mapper.Map<IEnumerable<GroupResponse>>(teacherGroups);
     }
 
     public async Task<GroupResponse> UpdateAsync(

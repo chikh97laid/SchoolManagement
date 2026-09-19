@@ -5,5 +5,5 @@ namespace EduCore.Application.Features.Authentication.Interfaces;
 
 public interface IJwtTokenService
 {
-    JwtTokenResult GenerateTokenAsync(ApplicationUser user, IList<string> roles);
+    JwtTokenResult GenerateToken(ApplicationUser user, IList<string> roles);
 }

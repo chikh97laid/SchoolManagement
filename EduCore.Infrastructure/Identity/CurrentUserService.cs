@@ -1,5 +1,6 @@
 ﻿using System.Security.Claims;
 using EduCore.Application.Common.Interfaces;
+using EduCore.Shared.Constants;
 using Microsoft.AspNetCore.Http;
 
 namespace EduCore.Infrastructure.Identity;
@@ -38,4 +39,9 @@ public class CurrentUserService : ICurrentUserService
             .User
             .Identity?
             .IsAuthenticated ?? false;
+
+    public bool IsAdmin =>
+        _httpContextAccessor.HttpContext?
+            .User
+            .IsInRole(Roles.Admin) ?? false;
 }

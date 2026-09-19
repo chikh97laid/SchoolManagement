@@ -18,7 +18,7 @@ public class JwtTokenService : IJwtTokenService
         _settings = settings.Value;    
     }
 
-    public JwtTokenResult GenerateTokenAsync(ApplicationUser user, IList<string> roles)
+    public JwtTokenResult GenerateToken(ApplicationUser user, IList<string> roles)
     {
 
         var claims = new List<Claim>

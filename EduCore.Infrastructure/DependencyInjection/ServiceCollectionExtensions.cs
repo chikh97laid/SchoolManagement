@@ -98,6 +98,14 @@ public static class ServiceCollectionExtensions
 
                 options.Events = new JwtBearerEvents
                 {
+                    // add cookies handler
+                    OnMessageReceived = context =>
+                    {
+                        context.Token = context.Request.Cookies["accessToken"];
+
+                        return Task.CompletedTask;
+                    },
+
                     // 1. no token or expired
                     OnChallenge = async context =>
                     {
