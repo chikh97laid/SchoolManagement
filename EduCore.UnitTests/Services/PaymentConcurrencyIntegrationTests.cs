@@ -184,7 +184,7 @@ public class PaymentConcurrencyIntegrationTests
         var mapper = new Mapper(new MapperConfiguration(
             configuration => configuration.AddProfile<PaymentProfile>(),
             NullLoggerFactory.Instance));
-        var service = new PaymentService(unitOfWork, mapper);
+        var service = new PaymentService(unitOfWork, mapper, new TestCurrentUserService());
         var request = new CreatePaymentRequest
         {
             StudentFeeId = feeId,
@@ -290,5 +290,9 @@ public class PaymentConcurrencyIntegrationTests
         public bool IsAuthenticated => false;
 
         public bool IsAdmin => false;
+
+        public bool IsStudent => false;
+
+        public bool IsTeacher => false;
     }
 }

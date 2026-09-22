@@ -36,7 +36,7 @@ public class StudentFeesController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
-    [Authorize(Roles = $"{Roles.Admin},{Roles.Teacher}")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Teacher},{Roles.Student}")]
     public async Task<ActionResult<StudentFeeResponse>> GetById(
         int id,
         CancellationToken cancellationToken)

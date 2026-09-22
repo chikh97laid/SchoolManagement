@@ -8,6 +8,10 @@ public class AttendanceResponse
     public int EnrollmentId { get; set; }
 
     public int StudentId { get; set; }
+    public string StudentName { get; set; } = string.Empty;
+
+    public int GroupId { get; set; }
+    public string GroupName { get; set; } = string.Empty;
 
     public DateOnly Date { get; set; }
 

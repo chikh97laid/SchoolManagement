@@ -697,5 +697,9 @@ public class TeacherResourceOwnershipIntegrationTests
         public bool IsAuthenticated => true;
 
         public bool IsAdmin => isAdmin;
+
+        public bool IsStudent => false;
+
+        public bool IsTeacher => !isAdmin;
     }
 }

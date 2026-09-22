@@ -9,6 +9,9 @@ public interface IPaymentService
         CreatePaymentRequest request,
         CancellationToken cancellationToken = default);
 
+    Task<IEnumerable<PaymentResponse>> GetAllAsync(
+    CancellationToken cancellationToken = default);
+
     Task<PaymentResponse> GetByIdAsync(
         int id,
         CancellationToken cancellationToken = default);

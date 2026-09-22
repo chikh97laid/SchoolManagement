@@ -1,10 +1,11 @@
 ﻿using AutoMapper;
+using EduCore.Application.Common;
 using EduCore.Application.Common.Exceptions;
+using EduCore.Application.Common.Interfaces;
 using EduCore.Application.Features.Attendances.DTOs;
 using EduCore.Application.Features.Attendances.Interfaces;
-using EduCore.Domain.Entities;
 using EduCore.Domain.Interfaces.Repositories;
-using EduCore.Application.Common;
+
 
 namespace EduCore.Application.Features.Attendances.Services;
 
@@ -12,13 +13,16 @@ public class AttendanceService : IAttendanceService
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly IMapper _mapper;
+    private readonly ICurrentUserService _currentUserService;
 
     public AttendanceService(
         IUnitOfWork unitOfWork,
-        IMapper mapper)
+        IMapper mapper,
+        ICurrentUserService currentUserService)
     {
         _unitOfWork = unitOfWork;
         _mapper = mapper;
+        _currentUserService = currentUserService;
     }
 
     public async Task<AttendanceResponse> CreateAsync(
@@ -49,7 +53,7 @@ public class AttendanceService : IAttendanceService
         if (alreadyExists)
             throw new BadRequestException(ErrorCodes.Attendance.AlreadyExists);
 
-        var attendance = _mapper.Map<Attendance>(request);
+        var attendance = _mapper.Map<Domain.Entities.Attendance> (request);
 
         await _unitOfWork.Attendances.AddAsync(
             attendance,
@@ -58,50 +62,130 @@ public class AttendanceService : IAttendanceService
         await _unitOfWork.SaveChangesAsync(
             cancellationToken);
 
-        return _mapper.Map<AttendanceResponse>(
-            attendance);
+        var createdAttendance = await _unitOfWork.Attendances
+        .FirstOrDefaultAsync(
+            x => x.Id == attendance.Id && !x.IsDeleted,
+            trackChanges: false,
+            cancellationToken: cancellationToken,
+            x => x.Enrollment,
+            x => x.Enrollment.Student,
+            x => x.Enrollment.Group);
+
+        if (createdAttendance is null)
+            throw new NotFoundException(ErrorCodes.Attendance.NotFound);
+
+        return _mapper.Map<AttendanceResponse>(createdAttendance);
     }
 
-    public async Task<IEnumerable<AttendanceResponse>> GetAllAsync(CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<AttendanceResponse>> GetAllAsync(
+        CancellationToken cancellationToken = default)
     {
-        var attendances = await _unitOfWork.Attendances
-            .GetAllAsync(
+        if (_currentUserService.IsAdmin)
+        {
+            var attendances = await _unitOfWork.Attendances
+                .FindAsync(
+                x => !x.IsDeleted,
+                false,
+                cancellationToken,
+                x => x.Enrollment,
+                x => x.Enrollment.Student,
+                x => x.Enrollment.Group);
+
+            return _mapper.Map<IEnumerable<AttendanceResponse>>(attendances);
+        }
+
+        if(_currentUserService.IsTeacher)
+        {
+            var teacherAttendances = await _unitOfWork.Attendances
+            .FindAsync(
+                x => !x.IsDeleted
+                    && x.Enrollment.Group.Teacher.UserId == _currentUserService.UserId,
                 trackChanges: false,
                 cancellationToken: cancellationToken,
-                includes: x => x.Enrollment);
+                x => x.Enrollment,
+                x => x.Enrollment.Student,
+                x => x.Enrollment.Group);
 
-        return _mapper.Map<IEnumerable<AttendanceResponse>>(attendances);
+            return _mapper.Map<IEnumerable<AttendanceResponse>>(teacherAttendances);
+        }
+
+        throw new ForbiddenException(ErrorCodes.User.Forbidden);
     }
 
     public async Task<AttendanceResponse> GetByIdAsync(
         int id,
         CancellationToken cancellationToken = default)
     {
-        var attendance = await _unitOfWork.Attendances
-            .FirstOrDefaultAsync(
-                x => x.Id == id && !x.IsDeleted,
-                trackChanges: false,
-                cancellationToken: cancellationToken,
-                includes: x => x.Enrollment);
+        if (_currentUserService.IsAdmin)
+        {
+            var attendance = await _unitOfWork.Attendances
+                .FirstOrDefaultAsync(
+                    x => x.Id == id && !x.IsDeleted,
+                    trackChanges: false,
+                    cancellationToken: cancellationToken,
+                        x => x.Enrollment,
+                        x => x.Enrollment.Student,
+                        x => x.Enrollment.Group);
 
-        if (attendance is null)
-            throw new NotFoundException(ErrorCodes.Attendance.NotFound);
+            if (attendance is null)
+                throw new NotFoundException(ErrorCodes.Attendance.NotFound);
 
-        return _mapper.Map<AttendanceResponse>(
-            attendance);
+            return _mapper.Map<AttendanceResponse>(attendance);
+        }
+
+        if (_currentUserService.IsStudent)
+        {
+            var attendance = await _unitOfWork.Attendances
+                .FirstOrDefaultAsync(
+                    x => x.Id == id
+                        && !x.IsDeleted
+                        && x.Enrollment.Student.UserId == _currentUserService.UserId,
+                    trackChanges: false,
+                    cancellationToken: cancellationToken,
+                        x => x.Enrollment,
+                        x => x.Enrollment.Student,
+                        x => x.Enrollment.Group);
+
+            if (attendance is null)
+                throw new NotFoundException(ErrorCodes.Attendance.NotFound);
+
+            return _mapper.Map<AttendanceResponse>(attendance);
+        }
+
+        if(_currentUserService.IsTeacher)
+        {
+            var attendance = await _unitOfWork.Attendances
+                .FirstOrDefaultAsync(
+                    x => x.Id == id
+                        && !x.IsDeleted
+                        && x.Enrollment.Group.Teacher.UserId == _currentUserService.UserId,
+                    trackChanges: false,
+                    cancellationToken: cancellationToken,
+                        x => x.Enrollment,
+                        x => x.Enrollment.Student,
+                        x => x.Enrollment.Group);
+
+            if (attendance is null)
+                throw new NotFoundException(ErrorCodes.Attendance.NotFound);
+
+            return _mapper.Map<AttendanceResponse>(attendance);
+        }
+
+        throw new ForbiddenException(ErrorCodes.User.Forbidden);
     }
+
 
     public async Task<IEnumerable<AttendanceResponse>> GetByEnrollmentAsync(
         int enrollmentId,
         CancellationToken cancellationToken = default)
     {
-        var enrollment = await _unitOfWork.Enrollments
-            .FirstOrDefaultAsync(
-                x => x.Id == enrollmentId && !x.IsDeleted,
-                trackChanges: false,
+        var isEnrollmentExist = await _unitOfWork.Enrollments
+                .ExistsAsync(
+                x => x.Id == enrollmentId
+                     && !x.IsDeleted,
                 cancellationToken: cancellationToken);
 
-        if (enrollment is null)
+        if (!isEnrollmentExist)
             throw new NotFoundException(ErrorCodes.Enrollment.NotFound);
 
         var attendance = await _unitOfWork.Attendances
@@ -109,8 +193,10 @@ public class AttendanceService : IAttendanceService
                 x => x.EnrollmentId == enrollmentId
                      && !x.IsDeleted,
                 trackChanges: false,
-                cancellationToken: cancellationToken,   
-                includes: x => x.Enrollment);
+                cancellationToken: cancellationToken,
+                    x => x.Enrollment,
+                    x => x.Enrollment.Student,
+                    x => x.Enrollment.Group);
 
         return _mapper.Map<IEnumerable<AttendanceResponse>>(attendance);
     }
@@ -119,13 +205,24 @@ public class AttendanceService : IAttendanceService
         int studentId,
         CancellationToken cancellationToken = default)
     {
+        var isStudentExist = await _unitOfWork.Students
+            .ExistsAsync(
+            x => x.Id == studentId
+                 && !x.IsDeleted,
+            cancellationToken: cancellationToken);
+
+        if (!isStudentExist)
+            throw new NotFoundException(ErrorCodes.Student.NotFound);
+
         var attendance = await _unitOfWork.Attendances
             .FindAsync(
                 x => x.Enrollment.StudentId == studentId
                      && !x.IsDeleted,
                 trackChanges: false,
                 cancellationToken: cancellationToken,
-                includes: x => x.Enrollment);
+                    x => x.Enrollment,
+                    x => x.Enrollment.Student,
+                    x => x.Enrollment.Group);
 
         return _mapper.Map<IEnumerable<AttendanceResponse>>(
             attendance);
@@ -145,6 +242,18 @@ public class AttendanceService : IAttendanceService
         if (attendance is null)
             throw new NotFoundException(ErrorCodes.Attendance.NotFound);
 
+        var alreadyExists = await _unitOfWork.Attendances
+        .ExistsAsync(
+            x => x.Id != id
+                 && x.EnrollmentId == attendance.EnrollmentId
+                 && x.Date == request.Date
+                 && !x.IsDeleted,
+            cancellationToken: cancellationToken);
+
+        if (alreadyExists)
+            throw new BadRequestException(
+                ErrorCodes.Attendance.AlreadyExists);
+
         _mapper.Map(request, attendance);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -154,7 +263,9 @@ public class AttendanceService : IAttendanceService
                 x => x.Id == id && !x.IsDeleted,
                 trackChanges: false,
                 cancellationToken: cancellationToken,
-                includes: x => x.Enrollment);
+                    x => x.Enrollment,
+                    x => x.Enrollment.Student,
+                    x => x.Enrollment.Group);
 
         if (updatedAttendance is null)
             throw new NotFoundException(ErrorCodes.Attendance.NotFound);

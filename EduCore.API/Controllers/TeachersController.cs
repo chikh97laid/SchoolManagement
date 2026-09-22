@@ -1,5 +1,6 @@
 ﻿using EduCore.Application.Features.Teachers.DTOs;
 using EduCore.Application.Features.Teachers.Interfaces;
+using EduCore.Shared.Constants;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -7,7 +8,7 @@ namespace EduCore.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Admin")]
+[Authorize]
 public class TeachersController : ControllerBase
 {
     private readonly ITeacherService _teacherService;
@@ -18,6 +19,7 @@ public class TeachersController : ControllerBase
     }
 
     // GET: api/teachers
+    [Authorize(Roles = Roles.Admin)]
     [HttpGet]
     public async Task<ActionResult<IEnumerable<TeacherResponse>>> GetAll(
         CancellationToken cancellationToken)
@@ -29,6 +31,7 @@ public class TeachersController : ControllerBase
     }
 
     // GET: api/teachers/5
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Teacher}, {Roles.Student}")]
     [HttpGet("{id:int}")]
     public async Task<ActionResult<TeacherResponse>> GetById(
         int id,
@@ -42,6 +45,7 @@ public class TeachersController : ControllerBase
     }
 
     // POST: api/teachers
+    [Authorize(Roles = Roles.Admin)]
     [HttpPost]
     public async Task<ActionResult<TeacherResponse>> Create(
         [FromBody] CreateTeacherRequest request,
@@ -58,6 +62,7 @@ public class TeachersController : ControllerBase
     }
 
     // PUT: api/teachers/5
+    [Authorize(Roles = Roles.Admin)]
     [HttpPut("{id:int}")]
     public async Task<ActionResult<TeacherResponse>> Update(
         int id,
@@ -73,6 +78,7 @@ public class TeachersController : ControllerBase
     }
 
     // PATCH: api/teachers/5/deactivate
+    [Authorize(Roles = Roles.Admin)]
     [HttpPatch("{id:int}/deactivate")]
     public async Task<IActionResult> Deactivate(
         int id,
@@ -86,6 +92,7 @@ public class TeachersController : ControllerBase
     }
 
     // PATCH: api/teachers/5/activate
+    [Authorize(Roles = Roles.Admin)]
     [HttpPatch("{id:int}/activate")]
     public async Task<IActionResult> Activate(
         int id,

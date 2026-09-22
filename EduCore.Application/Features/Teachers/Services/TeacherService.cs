@@ -8,6 +8,7 @@ using EduCore.Domain.Interfaces.Repositories;
 using Microsoft.AspNetCore.Identity;
 using EduCore.Application.Common;
 using EduCore.Shared.Constants;
+using EduCore.Application.Common.Interfaces;
 
 namespace EduCore.Application.Features.Teachers.Services;
 
@@ -16,15 +17,18 @@ public class TeacherService : ITeacherService
     private readonly IUnitOfWork _unitOfWork;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IMapper _mapper;
+    private readonly ICurrentUserService _currentUserService;
 
     public TeacherService(
         IUnitOfWork unitOfWork,
         UserManager<ApplicationUser> userManager,
-        IMapper mapper)
+        IMapper mapper,
+        ICurrentUserService currentUserService)
     {
         _unitOfWork = unitOfWork;
         _userManager = userManager;
         _mapper = mapper;
+        _currentUserService = currentUserService;
     }
 
     public async Task<CreateTeacherResponse> CreateAsync(
@@ -108,17 +112,82 @@ public class TeacherService : ITeacherService
         int id,
         CancellationToken cancellationToken = default)
     {
-        var teacher = await _unitOfWork.Teachers
-            .FirstOrDefaultAsync(
-                x => x.Id == id && !x.IsDeleted,
-                false,
-                cancellationToken,
-                x => x.User);
+        if (_currentUserService.IsAdmin)
+        {
+            var adminTeacher = await _unitOfWork.Teachers
+                .FirstOrDefaultAsync(
+                    x => x.Id == id && !x.IsDeleted,
+                    false,
+                    cancellationToken,
+                    x => x.User);
 
-        if (teacher is null)
+            if (adminTeacher is null)
+                throw new NotFoundException(ErrorCodes.Teacher.NotFound);
+
+            return _mapper.Map<TeacherResponse>(adminTeacher);
+        }
+
+        if (!_currentUserService.IsAuthenticated ||
+            _currentUserService.UserId == Guid.Empty)
+        {
             throw new NotFoundException(ErrorCodes.Teacher.NotFound);
+        }
 
-        return _mapper.Map<TeacherResponse>(teacher);
+        if (_currentUserService.IsStudent)
+        {
+            var student = await _unitOfWork.Students
+                .FirstOrDefaultAsync(
+                    x => x.UserId == _currentUserService.UserId
+                        && !x.IsDeleted,
+                    false,
+                    cancellationToken);
+
+            if (student is null)
+                throw new NotFoundException(ErrorCodes.Teacher.NotFound);
+
+            var teacher = await _unitOfWork.Teachers
+                .FirstOrDefaultAsync(
+                    x => x.Id == id
+                        && !x.IsDeleted,
+                    false,
+                    cancellationToken,
+                    x => x.User);
+
+            if (teacher is null)
+                throw new NotFoundException(ErrorCodes.Teacher.NotFound);
+
+            var isStudentLinkedToTeacher =
+                await _unitOfWork.Enrollments.ExistsAsync(
+                    x => x.StudentId == student.Id
+                        && x.Group.TeacherId == teacher.Id
+                        && !x.IsDeleted
+                        && !x.Group.IsDeleted,
+                    cancellationToken);
+
+            if (!isStudentLinkedToTeacher)
+                throw new NotFoundException(ErrorCodes.Teacher.NotFound);
+
+            return _mapper.Map<TeacherResponse>(teacher);
+        }
+
+        if (_currentUserService.IsTeacher)
+        {
+            var teacher = await _unitOfWork.Teachers
+                .FirstOrDefaultAsync(
+                    x => x.Id == id
+                        && !x.IsDeleted
+                        && x.UserId == _currentUserService.UserId,
+                    false,
+                    cancellationToken,
+                    x => x.User);
+
+            if (teacher is null)
+                throw new NotFoundException(ErrorCodes.Teacher.NotFound);
+
+            return _mapper.Map<TeacherResponse>(teacher);
+        }
+
+        throw new NotFoundException(ErrorCodes.Teacher.NotFound);
     }
 
     public async Task<IEnumerable<TeacherResponse>> GetAllAsync(

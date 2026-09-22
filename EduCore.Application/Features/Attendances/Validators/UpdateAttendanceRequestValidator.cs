@@ -20,7 +20,7 @@ namespace EduCore.Application.Features.Attendances.Validators
                 .IsInEnum().WithErrorCode(ErrorCodes.Attendance.InvalidStatus);
 
             RuleFor(x => x.Notes)
-                .MaximumLength(500).WithErrorCode(ErrorCodes.Attendance.NotesTooLong);
+                .MaximumLength(300).WithErrorCode(ErrorCodes.Attendance.NotesTooLong);
         }
     }
 }

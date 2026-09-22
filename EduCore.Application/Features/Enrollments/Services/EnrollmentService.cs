@@ -55,7 +55,7 @@ public class EnrollmentService : IEnrollmentService
 
         if (student is null)
         {
-            throw new BadRequestException(ErrorCodes.Enrollment.NotFound);
+            throw new NotFoundException(ErrorCodes.Student.NotFound);
         }
 
         var group = await _unitOfWork.Groups
@@ -69,8 +69,9 @@ public class EnrollmentService : IEnrollmentService
 
         if (group is null)
         {
-            throw new BadRequestException(ErrorCodes.Group.NotFound);
+            throw new NotFoundException(ErrorCodes.Group.NotFound);
         }
+
 
         var alreadyEnrolled = await _unitOfWork.Enrollments
             .ExistsAsync(
@@ -125,37 +126,70 @@ public class EnrollmentService : IEnrollmentService
             return _mapper.Map<EnrollmentResponse>(enrollment);
         }
 
-        var currentTeacherId = await ResolveCurrentTeacherIdAsync(cancellationToken);
-
-        if (currentTeacherId is null)
+        if (_currentUserService.IsStudent)
         {
-            throw new NotFoundException(ErrorCodes.Enrollment.NotFound);
+            var currentStudent = await _unitOfWork.Students
+                .FirstOrDefaultAsync(
+                    x => x.UserId == _currentUserService.UserId && !x.IsDeleted,
+                    false,
+                    cancellationToken);
+
+            if (currentStudent is null)
+                throw new NotFoundException(ErrorCodes.Enrollment.NotFound);
+
+            var studentEnrollment = await _unitOfWork.Enrollments
+                .FirstOrDefaultAsync(
+                    x => x.Id == id
+                        && !x.IsDeleted
+                        && x.StudentId == currentStudent.Id,
+                    false,
+                    cancellationToken,
+                    x => x.Student,
+                    x => x.Group,
+                    x => x.Group.Teacher);
+
+            if (studentEnrollment is null)
+                throw new NotFoundException(ErrorCodes.Enrollment.NotFound);
+
+            return _mapper.Map<EnrollmentResponse>(studentEnrollment);
         }
 
-        var teacherEnrollment = await _unitOfWork.Enrollments
-            .FirstOrDefaultAsync(
-                x => x.Id == id
-                    && !x.IsDeleted
-                    && x.Group.TeacherId == currentTeacherId.Value,
-                false,
-                cancellationToken,
-                x => x.Student,
-                x => x.Group,
-                x => x.Group.Teacher);
-
-        if (teacherEnrollment is null)
+        if(_currentUserService.IsTeacher)
         {
-            throw new NotFoundException(ErrorCodes.Enrollment.NotFound);
+            var currentTeacherId = await ResolveCurrentTeacherIdAsync(cancellationToken);
+
+            if (currentTeacherId is null)
+            {
+                throw new NotFoundException(ErrorCodes.Enrollment.NotFound);
+            }
+
+            var teacherEnrollment = await _unitOfWork.Enrollments
+                .FirstOrDefaultAsync(
+                    x => x.Id == id
+                        && !x.IsDeleted
+                        && x.Group.TeacherId == currentTeacherId.Value,
+                    false,
+                    cancellationToken,
+                    x => x.Student,
+                    x => x.Group,
+                    x => x.Group.Teacher);
+
+            if (teacherEnrollment is null)
+            {
+                throw new NotFoundException(ErrorCodes.Enrollment.NotFound);
+            }
+
+            // Group.Teacher is needed by the response mapping.
+            if (teacherEnrollment.Group.Teacher is null)
+            {
+                throw new BadRequestException(ErrorCodes.Group.GroupNoTeacher);
+            }
+
+            return _mapper.Map<EnrollmentResponse>(
+                teacherEnrollment);
         }
 
-        // Group.Teacher is needed by the response mapping.
-        if (teacherEnrollment.Group.Teacher is null)
-        {
-            throw new BadRequestException(ErrorCodes.Group.GroupNoTeacher);
-        }
-
-        return _mapper.Map<EnrollmentResponse>(
-            teacherEnrollment);
+        throw new ForbiddenException(ErrorCodes.User.Forbidden);
     }
 
     public async Task<IEnumerable<EnrollmentResponse>> GetAllAsync(

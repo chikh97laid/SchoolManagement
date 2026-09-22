@@ -1,6 +1,7 @@
 ﻿using AutoMapper;
 using EduCore.Application.Common;
 using EduCore.Application.Common.Exceptions;
+using EduCore.Application.Common.Interfaces;
 using EduCore.Application.Features.Payments.DTOs;
 using EduCore.Application.Features.Payments.Services;
 using EduCore.Domain.Entities;
@@ -23,7 +24,12 @@ namespace EduCore.UnitTests.Services
             _unitOfWorkMock = new Mock<IUnitOfWork>();
             _mapperMock = new Mock<IMapper>();
 
-            _service = new PaymentService(_unitOfWorkMock.Object, _mapperMock.Object);
+            var currentUserService = new Mock<ICurrentUserService>();
+            currentUserService.SetupGet(x => x.IsAdmin).Returns(false);
+            currentUserService.SetupGet(x => x.IsStudent).Returns(false);
+            currentUserService.SetupGet(x => x.IsTeacher).Returns(false);
+
+            _service = new PaymentService(_unitOfWorkMock.Object, _mapperMock.Object, currentUserService.Object);
         }
 
         [Fact]

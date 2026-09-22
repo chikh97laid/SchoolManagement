@@ -1,11 +1,12 @@
 ﻿using AutoMapper;
+using EduCore.Application.Common;
 using EduCore.Application.Common.Exceptions;
+using EduCore.Application.Common.Interfaces;
 using EduCore.Application.Features.Payments.DTOs;
 using EduCore.Application.Features.Payments.Interfaces;
 using EduCore.Domain.Entities;
 using EduCore.Domain.Entities.Enums;
 using EduCore.Domain.Interfaces.Repositories;
-using EduCore.Application.Common;
 
 
 namespace EduCore.Application.Features.Payments.Services
@@ -14,11 +15,13 @@ namespace EduCore.Application.Features.Payments.Services
     {
         private readonly IUnitOfWork _unitOfWork;
         private readonly IMapper _mapper;
+        private readonly ICurrentUserService _currentUserService;
 
-        public PaymentService(IUnitOfWork unitOfWork, IMapper mapper)
+        public PaymentService(IUnitOfWork unitOfWork, IMapper mapper, ICurrentUserService currentUserService)
         {
             _unitOfWork = unitOfWork;
             _mapper = mapper;
+            _currentUserService = currentUserService;
         }
 
         public async Task<PaymentResponse> CreateAsync(CreatePaymentRequest request,
@@ -70,20 +73,71 @@ namespace EduCore.Application.Features.Payments.Services
             }
         }
 
+        public async Task<IEnumerable<PaymentResponse>> GetAllAsync(
+        CancellationToken cancellationToken = default)
+        {
+            if (_currentUserService.IsAdmin)
+            {
+                var payments = await _unitOfWork.Payments
+                    .FindAsync(
+                        x => !x.IsDeleted,
+                        trackChanges: false,
+                        cancellationToken: cancellationToken);
+
+                return _mapper.Map<IEnumerable<PaymentResponse>>(payments);
+            }
+
+            if (_currentUserService.IsStudent)
+            {
+                var paymentsForStudent = await _unitOfWork.Payments
+                .FindAsync(
+                    x => !x.IsDeleted
+                        && x.StudentFee.Enrollment.Student.UserId == _currentUserService.UserId,
+                    trackChanges: false,
+                    cancellationToken: cancellationToken);
+
+                return _mapper.Map<IEnumerable<PaymentResponse>>(paymentsForStudent);
+            }
+
+            throw new ForbiddenException(ErrorCodes.User.Forbidden);
+        }
+
         public async Task<PaymentResponse> GetByIdAsync(
         int id,
         CancellationToken cancellationToken = default)
         {
-            var payment = await _unitOfWork.Payments
+
+            if (_currentUserService.IsAdmin)
+            {
+                var payment = await _unitOfWork.Payments
+                    .FirstOrDefaultAsync(
+                        x => x.Id == id && !x.IsDeleted,
+                        false,
+                        cancellationToken);
+
+                if (payment is null)
+                    throw new NotFoundException(ErrorCodes.Payment.NotFound);
+
+                return _mapper.Map<PaymentResponse>(payment);
+            }
+
+            if (_currentUserService.IsStudent)
+            {
+                var studentPayment = await _unitOfWork.Payments
                 .FirstOrDefaultAsync(
-                    x => x.Id == id && !x.IsDeleted,
-                    trackChanges: false,
-                    cancellationToken: cancellationToken);
+                    x => x.Id == id
+                        && !x.IsDeleted
+                        && x.StudentFee.Enrollment.Student.UserId == _currentUserService.UserId,
+                    false,
+                    cancellationToken);
 
-            if (payment is null)
-                throw new NotFoundException(ErrorCodes.Payment.NotFound);
+                if (studentPayment is null)
+                    throw new NotFoundException(ErrorCodes.Payment.NotFound);
 
-            return _mapper.Map<PaymentResponse>(payment);
+                return _mapper.Map<PaymentResponse>(studentPayment);
+            }
+
+            throw new ForbiddenException(ErrorCodes.User.Forbidden);
         }
 
         public async Task<IEnumerable<PaymentResponse>> GetByStudentFeeAsync(
@@ -91,12 +145,11 @@ namespace EduCore.Application.Features.Payments.Services
             CancellationToken cancellationToken = default)
         {
             var fee = await _unitOfWork.StudentFees
-                .FirstOrDefaultAsync(
+                .ExistsAsync(
                     x => x.Id == studentFeeId && !x.IsDeleted,
-                    trackChanges: false,
                     cancellationToken: cancellationToken);
 
-            if (fee is null)
+            if (!fee)
                 throw new NotFoundException(ErrorCodes.StudentFee.NotFound);
 
             var payments = await _unitOfWork.Payments

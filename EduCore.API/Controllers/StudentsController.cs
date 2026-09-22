@@ -9,7 +9,7 @@ namespace EduCore.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = Roles.Admin)]
+[Authorize]
 public class StudentsController : ControllerBase
 {
     private readonly IStudentService _studentService;
@@ -21,6 +21,7 @@ public class StudentsController : ControllerBase
     }
 
     // POST: api/StudentManagement
+    [Authorize(Roles = Roles.Admin)]
     [HttpPost]
     public async Task<ActionResult<CreateStudentResponse>> CreateStudent(
         [FromBody] CreateStudentRequest request,
@@ -38,6 +39,7 @@ public class StudentsController : ControllerBase
     }
 
     // GET: api/StudentManagement
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Teacher}")]
     [HttpGet]
     public async Task<ActionResult<IEnumerable<StudentResponse>>> GetStudents(
         CancellationToken cancellationToken)
@@ -50,6 +52,7 @@ public class StudentsController : ControllerBase
     }
 
     // GET: api/StudentManagement/5
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Teacher},{Roles.Student}")]
     [HttpGet("{id:int}")]
     public async Task<ActionResult<StudentResponse>> GetStudentById(
         int id,
@@ -64,6 +67,7 @@ public class StudentsController : ControllerBase
     }
 
     // PUT: api/StudentManagement/5
+    [Authorize(Roles = Roles.Admin)]
     [HttpPut("{id:int}")]
     public async Task<ActionResult<StudentResponse>> UpdateStudent(
         int id,
@@ -80,6 +84,7 @@ public class StudentsController : ControllerBase
     }
 
     // PATCH: api/StudentManagement/5/deactivate
+    [Authorize(Roles = Roles.Admin)]
     [HttpPatch("{id:int}/deactivate")]
     public async Task<IActionResult> DeactivateStudentAccount(
         int id,
@@ -93,6 +98,7 @@ public class StudentsController : ControllerBase
         return NoContent();
     }
 
+    [Authorize(Roles = Roles.Admin)]
     [HttpPost("import")]
     [Consumes("multipart/form-data")]
     public async Task<ActionResult<ImportStudentsResponse>> ImportStudents(

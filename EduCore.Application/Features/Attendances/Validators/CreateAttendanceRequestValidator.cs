@@ -16,15 +16,17 @@ namespace EduCore.Application.Features.Attendances.Validators
             RuleFor(x => x.Date)
                 .NotEmpty()
                 .WithErrorCode(ErrorCodes.Attendance.DateRequired)
-                .LessThanOrEqualTo(DateOnly.FromDateTime(DateTime.Now))
-                .WithErrorCode(ErrorCodes.Attendance.DateInFuture);
+                .LessThanOrEqualTo(DateOnly.FromDateTime(DateTime.UtcNow))
+                .WithErrorCode(ErrorCodes.Attendance.DateInFuture)
+                .GreaterThanOrEqualTo(DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-30))) // يمنع التواريخ الأقدم من 30 يوماً
+                .WithErrorCode(ErrorCodes.Attendance.DateTooOld);
 
             RuleFor(x => x.Status)
                 .IsInEnum()
                 .WithErrorCode(ErrorCodes.Attendance.InvalidStatus);
 
             RuleFor(x => x.Notes)
-                .MaximumLength(500)
+                .MaximumLength(300)
                 .WithErrorCode(ErrorCodes.Attendance.NotesTooLong);
         }
     }

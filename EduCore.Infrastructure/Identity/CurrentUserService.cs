@@ -44,4 +44,12 @@ public class CurrentUserService : ICurrentUserService
         _httpContextAccessor.HttpContext?
             .User
             .IsInRole(Roles.Admin) ?? false;
+
+    public bool IsStudent => _httpContextAccessor.HttpContext?
+            .User
+            .IsInRole(Roles.Student) ?? false;
+
+    public bool IsTeacher => _httpContextAccessor.HttpContext?
+            .User
+            .IsInRole(Roles.Teacher) ?? false;
 }

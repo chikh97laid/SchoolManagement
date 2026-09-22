@@ -2,6 +2,7 @@
 using ClosedXML.Excel;
 using EduCore.Application.Common;
 using EduCore.Application.Common.Exceptions;
+using EduCore.Application.Common.Interfaces;
 using EduCore.Application.Features.StudentManagement.DTOs;
 using EduCore.Application.Features.StudentManagement.DTOs.Student;
 using EduCore.Application.Features.StudentManagement.Interfaces;
@@ -23,17 +24,20 @@ public class StudentService : IStudentService
     private readonly StudentImportSettings _settings;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IMapper _mapper;
+    private readonly ICurrentUserService _currentUserService;
 
     public StudentService(
         UserManager<ApplicationUser> userManager,
         IUnitOfWork unitOfWork,
         IMapper mapper,
-        IOptions<StudentImportSettings> settings)
+        IOptions<StudentImportSettings> settings,
+        ICurrentUserService currentUserService)
     {
         _userManager = userManager;
         _unitOfWork = unitOfWork;
         _mapper = mapper;
         _settings = settings.Value;
+        _currentUserService = currentUserService;
     }
 
     public async Task<CreateStudentResponse> CreateStudentAsync(
@@ -112,30 +116,110 @@ public class StudentService : IStudentService
     int studentId,
     CancellationToken cancellationToken = default)
     {
-        var student = await _unitOfWork.Students.FirstOrDefaultAsync(
-            x => x.Id == studentId && !x.IsDeleted,
-            false,
-            cancellationToken,
-            x => x.User);
+        if (_currentUserService.IsAdmin)
+        {
+            var adminStudent = await _unitOfWork.Students.FirstOrDefaultAsync(
+                x => x.Id == studentId && !x.IsDeleted,
+                false,
+                cancellationToken,
+                x => x.User);
 
-        if (student is null)
+            if (adminStudent is null)
+                throw new NotFoundException(ErrorCodes.Student.NotFound);
+
+            return _mapper.Map<StudentResponse>(adminStudent);
+        }
+
+        if (!_currentUserService.IsAuthenticated || _currentUserService.UserId == Guid.Empty)
             throw new NotFoundException(ErrorCodes.Student.NotFound);
 
-        return _mapper.Map<StudentResponse>(student);
+        if (_currentUserService.IsStudent)
+        {
+            var currentStudent = await _unitOfWork.Students.FirstOrDefaultAsync(
+                x => x.UserId == _currentUserService.UserId && !x.IsDeleted,
+                false,
+                cancellationToken,
+                x => x.User);
+
+            if (currentStudent is null || currentStudent.Id != studentId)
+                throw new NotFoundException(ErrorCodes.Student.NotFound);
+
+            return _mapper.Map<StudentResponse>(currentStudent);
+        }
+
+        if (_currentUserService.IsTeacher)
+        {
+            var teacher = await _unitOfWork.Teachers.FirstOrDefaultAsync(
+                x => x.UserId == _currentUserService.UserId && !x.IsDeleted,
+                false,
+                cancellationToken);
+
+            if (teacher is null)
+                throw new NotFoundException(ErrorCodes.Student.NotFound);
+
+            var student = await _unitOfWork.Students.FirstOrDefaultAsync(
+                x => x.Id == studentId && !x.IsDeleted,
+                false,
+                cancellationToken,
+                x => x.User);
+
+            if (student is null)
+                throw new NotFoundException(ErrorCodes.Student.NotFound);
+
+            var isStudentInTeacherScope = await _unitOfWork.Enrollments.ExistsAsync(
+                x => x.StudentId == student.Id
+                    && x.Group.TeacherId == teacher.Id
+                    && !x.IsDeleted
+                    && !x.Group.IsDeleted,
+                cancellationToken);
+
+            if (!isStudentInTeacherScope)
+                throw new NotFoundException(ErrorCodes.Student.NotFound);
+
+            return _mapper.Map<StudentResponse>(student);
+        }
+
+        throw new NotFoundException(ErrorCodes.Student.NotFound);
     }
 
     public async Task<IEnumerable<StudentResponse>> GetStudentsAsync(
     CancellationToken cancellationToken = default)
     {
-        var students = await _unitOfWork.Students.FindAsync(
-            x => !x.IsDeleted,
-            false,
-            cancellationToken,
-            x => x.User);
+        if (_currentUserService.IsAdmin)
+        {
+            var students = await _unitOfWork.Students.FindAsync(
+                x => !x.IsDeleted,
+                false,
+                cancellationToken,
+                x => x.User);
 
-        students = students.OrderBy(s => s.Id);
+            return _mapper.Map<IEnumerable<StudentResponse>>(students.OrderBy(s => s.Id));
+        }
 
-        return _mapper.Map<IEnumerable<StudentResponse>>(students);
+        if (_currentUserService.IsTeacher)
+        {
+            var teacher = await _unitOfWork.Teachers.FirstOrDefaultAsync(
+                x => x.UserId == _currentUserService.UserId && !x.IsDeleted,
+                false,
+                cancellationToken);
+
+            if (teacher is null)
+                return [];
+
+            var students = await _unitOfWork.Students.FindAsync(
+                x => !x.IsDeleted
+                    && x.Enrollments.Any(e => e.Group.TeacherId == teacher.Id && !e.IsDeleted && !e.Group.IsDeleted),
+                false,
+                cancellationToken,
+                x => x.User);
+
+            return _mapper.Map<IEnumerable<StudentResponse>>(students.OrderBy(s => s.Id));
+        }
+
+        if (_currentUserService.IsStudent)
+            throw new NotFoundException(ErrorCodes.Student.NotFound);
+
+        throw new NotFoundException(ErrorCodes.Student.NotFound);
     }
 
 
@@ -154,6 +238,12 @@ public class StudentService : IStudentService
             throw new NotFoundException(ErrorCodes.Student.NotFound);
 
         _mapper.Map(request, student);
+
+        if (student.User is not null)
+        {
+            student.User.FirstName = request.FirstName;
+            student.User.LastName = request.LastName;
+        }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

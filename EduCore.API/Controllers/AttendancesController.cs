@@ -8,7 +8,7 @@ namespace EduCore.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = Roles.Admin)]
+[Authorize]
 public class AttendancesController : ControllerBase
 {
     private readonly IAttendanceService _attendanceService;
@@ -20,6 +20,7 @@ public class AttendancesController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = Roles.Admin)]
     public async Task<ActionResult<AttendanceResponse>> Create(
         [FromBody] CreateAttendanceRequest request,
         CancellationToken cancellationToken)
@@ -35,6 +36,7 @@ public class AttendancesController : ControllerBase
     }
 
     [HttpGet]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Teacher}")]
     public async Task<ActionResult<IEnumerable<AttendanceResponse>>> GetAll(
         CancellationToken cancellationToken)
     {
@@ -45,6 +47,7 @@ public class AttendancesController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Teacher},{Roles.Student}")]
     public async Task<ActionResult<AttendanceResponse>> GetById(
         int id,
         CancellationToken cancellationToken)
@@ -57,6 +60,7 @@ public class AttendancesController : ControllerBase
     }
 
     [HttpGet("enrollment/{enrollmentId:int}")]
+    [Authorize(Roles = Roles.Admin)]
     public async Task<ActionResult<IEnumerable<AttendanceResponse>>> GetByEnrollment(
         int enrollmentId,
         CancellationToken cancellationToken)
@@ -69,6 +73,7 @@ public class AttendancesController : ControllerBase
     }
 
     [HttpGet("student/{studentId:int}")]
+    [Authorize(Roles = Roles.Admin)]
     public async Task<ActionResult<IEnumerable<AttendanceResponse>>> GetByStudent(
         int studentId,
         CancellationToken cancellationToken)
@@ -81,6 +86,7 @@ public class AttendancesController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
+    [Authorize(Roles = Roles.Admin)]
     public async Task<ActionResult<AttendanceResponse>> Update(
         int id,
         [FromBody] UpdateAttendanceRequest request,

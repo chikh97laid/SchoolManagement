@@ -9,4 +9,8 @@ public interface ICurrentUserService
     bool IsAuthenticated { get; }
 
     bool IsAdmin { get; }
+
+    bool IsStudent { get; }
+
+    bool IsTeacher { get; }
 }

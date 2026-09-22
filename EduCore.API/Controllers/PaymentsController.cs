@@ -35,8 +35,19 @@ public class PaymentsController : ControllerBase
             result);
     }
 
+    [HttpGet]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Student}")]
+    public async Task<ActionResult<IEnumerable<PaymentResponse>>> GetAll(
+    CancellationToken cancellationToken)
+    {
+        var payments = await _paymentService.GetAllAsync(cancellationToken);
+
+        return Ok(payments);
+    }
+
+
     [HttpGet("{id:int}")]
-    [Authorize(Roles = Roles.Admin)]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Student}")]
     public async Task<ActionResult<PaymentResponse>> GetById(
         int id,
         CancellationToken cancellationToken)

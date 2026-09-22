@@ -14,7 +14,17 @@ public class AttendanceProfile : Profile
         CreateMap<Attendance, AttendanceResponse>()
             .ForMember(
                 dest => dest.StudentId,
-                opt => opt.MapFrom(
-                    src => src.Enrollment.StudentId));
+                opt => opt.MapFrom(src => src.Enrollment.StudentId))
+            .ForMember(
+                dest => dest.StudentName,
+                opt => opt.MapFrom(src =>
+                    $"{src.Enrollment.Student.FirstName} {src.Enrollment.Student.LastName}"))
+            .ForMember(
+                dest => dest.GroupId,
+                opt => opt.MapFrom(src => src.Enrollment.GroupId))
+            .ForMember(
+                dest => dest.GroupName,
+                opt => opt.MapFrom(src => src.Enrollment.Group.Name));
+
     }
 }
