@@ -4,6 +4,7 @@ using EduCore.Domain.Entities;
 using EduCore.Domain.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using System.Reflection.Emit;
 
 namespace EduCore.Persistence.Context;
 
@@ -36,6 +37,28 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, Applicati
             .IncrementsBy(1);
 
         builder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);
+
+        // Global soft-delete filters
+        builder.Entity<Student>()
+            .HasQueryFilter(x => !x.IsDeleted);
+
+        builder.Entity<Teacher>()
+            .HasQueryFilter(x => !x.IsDeleted);
+
+        builder.Entity<Group>()
+            .HasQueryFilter(x => !x.IsDeleted);
+
+        builder.Entity<Enrollment>()
+            .HasQueryFilter(x => !x.IsDeleted);
+
+        builder.Entity<Attendance>()
+            .HasQueryFilter(x => !x.IsDeleted);
+
+        builder.Entity<StudentFee>()
+            .HasQueryFilter(x => !x.IsDeleted);
+
+        builder.Entity<Payment>()
+            .HasQueryFilter(x => !x.IsDeleted);
 
     }
 

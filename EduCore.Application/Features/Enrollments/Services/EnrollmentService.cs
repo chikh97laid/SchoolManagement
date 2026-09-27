@@ -2,6 +2,7 @@
 using EduCore.Application.Common;
 using EduCore.Application.Common.Exceptions;
 using EduCore.Application.Common.Interfaces;
+using EduCore.Application.Common.Pagination;
 using EduCore.Application.Features.Enrollments.DTOs;
 using EduCore.Application.Features.Enrollments.Interfaces;
 using EduCore.Domain.Entities;
@@ -25,31 +26,13 @@ public class EnrollmentService : IEnrollmentService
         _currentUserService = currentUserService;
     }
 
-    private async Task<int?> ResolveCurrentTeacherIdAsync(
-        CancellationToken cancellationToken)
-    {
-        if (!_currentUserService.IsAuthenticated ||
-            _currentUserService.UserId == Guid.Empty)
-        {
-            return null;
-        }
-
-        var teacher = await _unitOfWork.Teachers
-            .FirstOrDefaultAsync(
-                x => x.UserId == _currentUserService.UserId && !x.IsDeleted,
-                false,
-                cancellationToken);
-
-        return teacher?.Id;
-    }
-
     public async Task<EnrollmentResponse> CreateAsync(
         CreateEnrollmentRequest request,
         CancellationToken cancellationToken = default)
     {
         var student = await _unitOfWork.Students
             .FirstOrDefaultAsync(
-                x => (x.Id == request.StudentId && !x.IsDeleted && x.IsActive),
+                x => (x.Id == request.StudentId),
                 false,
                 cancellationToken);
 
@@ -58,11 +41,14 @@ public class EnrollmentService : IEnrollmentService
             throw new NotFoundException(ErrorCodes.Student.NotFound);
         }
 
+        if (!student.IsActive)
+        {
+            throw new BadRequestException(ErrorCodes.Student.NotActive);
+        }
+
         var group = await _unitOfWork.Groups
             .FirstOrDefaultAsync(
-                x => x.Id == request.GroupId
-                     && !x.IsDeleted
-                     && x.IsActive,
+                x => x.Id == request.GroupId,
                 false,
                 cancellationToken,
                 x => x.Teacher);
@@ -72,12 +58,16 @@ public class EnrollmentService : IEnrollmentService
             throw new NotFoundException(ErrorCodes.Group.NotFound);
         }
 
+        if (!group.IsActive)
+        {
+            throw new BadRequestException(ErrorCodes.Group.NotActive);
+        }
+
 
         var alreadyEnrolled = await _unitOfWork.Enrollments
             .ExistsAsync(
                 x => x.StudentId == request.StudentId
-                     && x.GroupId == request.GroupId
-                     && !x.IsDeleted, 
+                     && x.GroupId == request.GroupId,
             cancellationToken);
 
         if (alreadyEnrolled)
@@ -111,12 +101,14 @@ public class EnrollmentService : IEnrollmentService
         {
             var enrollment = await _unitOfWork.Enrollments
                 .FirstOrDefaultAsync(
-                    x => x.Id == id && !x.IsDeleted,
+                    x => x.Id == id,
                     false,
                     cancellationToken,
                     x => x.Student,
+                    x => x.Student.User,
                     x => x.Group,
-                    x => x.Group.Teacher);
+                    x => x.Group.Teacher,
+                    x => x.Group.Teacher.User);
 
             if (enrollment is null)
             {
@@ -128,25 +120,19 @@ public class EnrollmentService : IEnrollmentService
 
         if (_currentUserService.IsStudent)
         {
-            var currentStudent = await _unitOfWork.Students
-                .FirstOrDefaultAsync(
-                    x => x.UserId == _currentUserService.UserId && !x.IsDeleted,
-                    false,
-                    cancellationToken);
-
-            if (currentStudent is null)
-                throw new NotFoundException(ErrorCodes.Enrollment.NotFound);
-
             var studentEnrollment = await _unitOfWork.Enrollments
-                .FirstOrDefaultAsync(
-                    x => x.Id == id
-                        && !x.IsDeleted
-                        && x.StudentId == currentStudent.Id,
-                    false,
-                    cancellationToken,
-                    x => x.Student,
-                    x => x.Group,
-                    x => x.Group.Teacher);
+            .FirstOrDefaultAsync(
+                x => x.Id == id
+                     && x.Student.UserId == _currentUserService.UserId,
+                false,
+                cancellationToken,
+                x => x.Student,
+                x => x.Student.User,
+                x => x.Group,
+                x => x.Group.Teacher,
+                x => x.Group.Teacher.User
+            );
+
 
             if (studentEnrollment is null)
                 throw new NotFoundException(ErrorCodes.Enrollment.NotFound);
@@ -156,23 +142,19 @@ public class EnrollmentService : IEnrollmentService
 
         if(_currentUserService.IsTeacher)
         {
-            var currentTeacherId = await ResolveCurrentTeacherIdAsync(cancellationToken);
-
-            if (currentTeacherId is null)
-            {
-                throw new NotFoundException(ErrorCodes.Enrollment.NotFound);
-            }
-
             var teacherEnrollment = await _unitOfWork.Enrollments
                 .FirstOrDefaultAsync(
                     x => x.Id == id
-                        && !x.IsDeleted
-                        && x.Group.TeacherId == currentTeacherId.Value,
+                         && x.Group.Teacher.UserId == _currentUserService.UserId,
                     false,
                     cancellationToken,
                     x => x.Student,
+                    x => x.Student.User,
                     x => x.Group,
-                    x => x.Group.Teacher);
+                    x => x.Group.Teacher,
+                    x => x.Group.Teacher.User
+                );
+
 
             if (teacherEnrollment is null)
             {
@@ -189,33 +171,49 @@ public class EnrollmentService : IEnrollmentService
                 teacherEnrollment);
         }
 
-        throw new ForbiddenException(ErrorCodes.User.Forbidden);
+        throw new NotFoundException(ErrorCodes.User.NotFound);
     }
 
-    public async Task<IEnumerable<EnrollmentResponse>> GetAllAsync(
+    public async Task<PagedResult<EnrollmentResponse>> GetAllAsync(
+        PaginationParameters parameters,
         CancellationToken cancellationToken = default)
     {
-        var enrollments = await _unitOfWork.Enrollments
-            .GetAllWithDetailsAsync();
+        var (enrollments, totalCount) = await _unitOfWork.Enrollments
+            .GetPagedAsync(
+                x => true,
+                x => x.Id,
+                parameters.PageNumber,
+                parameters.PageSize,
+                false,
+                cancellationToken,
+                x => x.Student,
+                x => x.Student.User,
+                x => x.Group,
+                x => x.Group.Teacher,
+                x => x.Group.Teacher.User);
 
-        return _mapper.Map<IEnumerable<EnrollmentResponse>>(
-            enrollments);
+        return new PagedResult<EnrollmentResponse>
+        {
+            Items = _mapper.Map<List<EnrollmentResponse>>(enrollments),
+            PageNumber = parameters.PageNumber,
+            PageSize = parameters.PageSize,
+            TotalCount = totalCount
+        };
     }
 
     public async Task DeactivateAsync(
-        int id,
-        CancellationToken cancellationToken = default)
+    int id,
+    CancellationToken cancellationToken = default)
     {
         var enrollment = await _unitOfWork.Enrollments
             .FirstOrDefaultAsync(
-                x => x.Id == id && !x.IsDeleted,
-                true,
-                cancellationToken);
+                x => x.Id == id,
+                trackChanges: true,
+                cancellationToken: cancellationToken);
 
         if (enrollment is null)
-        {
-            throw new NotFoundException(ErrorCodes.Enrollment.NotFound);
-        }
+            throw new NotFoundException(
+                ErrorCodes.Enrollment.NotFound);
 
         enrollment.IsActive = false;
 
@@ -229,18 +227,51 @@ public class EnrollmentService : IEnrollmentService
     {
         var enrollment = await _unitOfWork.Enrollments
             .FirstOrDefaultAsync(
-                x => x.Id == id && !x.IsDeleted,
-                true,
-                cancellationToken);
+                x => x.Id == id,
+                trackChanges: true,
+                cancellationToken: cancellationToken,
+                x => x.Student,
+                x => x.Group);
 
         if (enrollment is null)
-        {
-            throw new NotFoundException(ErrorCodes.Enrollment.NotFound);
-        }
+            throw new NotFoundException(
+                ErrorCodes.Enrollment.NotFound);
+
+        if (!enrollment.Student.IsActive)
+            throw new BadRequestException(
+                ErrorCodes.Student.NotActive);
+
+        if (!enrollment.Group.IsActive)
+            throw new BadRequestException(
+                ErrorCodes.Group.NotActive);
 
         enrollment.IsActive = true;
 
         await _unitOfWork.SaveChangesAsync(
             cancellationToken);
     }
+
+    public async Task SoftDeleteAsync(
+        int id,
+        CancellationToken cancellationToken = default)
+    {
+        var enrollment = await _unitOfWork.Enrollments
+            .FirstOrDefaultAsync(
+                x => x.Id == id,
+                trackChanges: true,
+                cancellationToken: cancellationToken);
+
+        if (enrollment is null)
+            throw new NotFoundException(ErrorCodes.Enrollment.NotFound);
+
+        enrollment.IsActive = false;
+        enrollment.IsDeleted = true;
+        enrollment.DeletedAt = DateTime.UtcNow;
+        enrollment.DeletedBy = _currentUserService.IsAuthenticated
+            ? _currentUserService.UserId
+            : null;
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
 }

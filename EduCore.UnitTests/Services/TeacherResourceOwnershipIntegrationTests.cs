@@ -1,6 +1,7 @@
 using AutoMapper;
 using EduCore.Application.Common.Exceptions;
 using EduCore.Application.Common.Interfaces;
+using EduCore.Application.Common.Pagination;
 using EduCore.Application.Features.Enrollments.Mapping;
 using EduCore.Application.Features.Enrollments.Services;
 using EduCore.Application.Features.Groups.Mapping;
@@ -38,16 +39,12 @@ public class TeacherResourceOwnershipIntegrationTests
 
             var teacherA = new Teacher
             {
-                FirstName = "Teacher",
-                LastName = "A-" + suffix,
                 UserId = teacherAUserId,
                 IsActive = true
             };
 
             var teacherB = new Teacher
             {
-                FirstName = "Teacher",
-                LastName = "B-" + suffix,
                 UserId = teacherBUserId,
                 IsActive = true
             };
@@ -79,7 +76,7 @@ public class TeacherResourceOwnershipIntegrationTests
 
             await Assert.ThrowsAsync<NotFoundException>(() => groupService.GetByIdAsync(groupB.Id));
 
-            var teacherGroups = (await groupService.GetAllAsync()).ToList();
+            var teacherGroups = (await groupService.GetAllAsync(new PaginationParameters())).Items;
             Assert.Contains(teacherGroups, x => x.Id == groupA.Id);
             Assert.DoesNotContain(teacherGroups, x => x.Id == groupB.Id);
         }
@@ -103,20 +100,16 @@ public class TeacherResourceOwnershipIntegrationTests
         {
             await setupContext.Users.AddAsync(CreateUser(teacherAUserId, $"teacher-a-collection-{suffix}"));
             await setupContext.Users.AddAsync(CreateUser(teacherBUserId, $"teacher-b-collection-{suffix}"));
-            await setupContext.SaveChangesAsync();
 
             var teacherA = new Teacher
             {
-                FirstName = "Teacher",
-                LastName = "A-Collection-" + suffix,
                 UserId = teacherAUserId,
                 IsActive = true
             };
 
+
             var teacherB = new Teacher
             {
-                FirstName = "Teacher",
-                LastName = "B-Collection-" + suffix,
                 UserId = teacherBUserId,
                 IsActive = true
             };
@@ -150,7 +143,7 @@ public class TeacherResourceOwnershipIntegrationTests
             await setupContext.SaveChangesAsync();
 
             var groupService = CreateGroupService(teacherAUserId);
-            var results = (await groupService.GetAllAsync()).ToList();
+            var results = (await groupService.GetAllAsync(new PaginationParameters())).Items;
 
             Assert.Equal(2, results.Count);
             Assert.Contains(results, x => x.Id == groupA1.Id);
@@ -170,6 +163,7 @@ public class TeacherResourceOwnershipIntegrationTests
         var suffix = Guid.NewGuid().ToString("N")[..10];
         var teacherAUserId = Guid.NewGuid();
         var teacherBUserId = Guid.NewGuid();
+        var studentUserId = Guid.NewGuid();
 
         await using var setupContext = CreateContext(Guid.NewGuid());
         await setupContext.Database.MigrateAsync();
@@ -178,29 +172,33 @@ public class TeacherResourceOwnershipIntegrationTests
         {
             await setupContext.Users.AddAsync(CreateUser(teacherAUserId, $"teacher-a-enroll-{suffix}"));
             await setupContext.Users.AddAsync(CreateUser(teacherBUserId, $"teacher-b-enroll-{suffix}"));
-            await setupContext.SaveChangesAsync();
 
             var teacherA = new Teacher
             {
-                FirstName = "Teacher",
-                LastName = "A-" + suffix,
                 UserId = teacherAUserId,
                 IsActive = true
             };
 
+
             var teacherB = new Teacher
             {
-                FirstName = "Teacher",
-                LastName = "B-" + suffix,
                 UserId = teacherBUserId,
                 IsActive = true
             };
 
+
+            await setupContext.Users.AddAsync(
+                CreateUser(
+                    studentUserId,
+                    $"student-ownership-{suffix}",
+                    "Student",
+                    suffix));
+
+
             var student = new Student
             {
                 StudentCode = "OWNERSHIP-" + suffix,
-                FirstName = "Student",
-                LastName = suffix,
+                UserId = studentUserId,
                 Gender = Gender.Male,
                 IsActive = true
             };
@@ -234,6 +232,8 @@ public class TeacherResourceOwnershipIntegrationTests
             await setupContext.Groups.AddAsync(groupB);
             await setupContext.Enrollments.AddAsync(enrollmentB);
             await setupContext.StudentFees.AddAsync(feeB);
+
+
             await setupContext.SaveChangesAsync();
 
             var enrollmentService = CreateEnrollmentService(teacherAUserId);
@@ -244,7 +244,10 @@ public class TeacherResourceOwnershipIntegrationTests
         }
         finally
         {
-            await CleanupUserAsync(teacherAUserId, teacherBUserId);
+            await CleanupUserAsync(
+                teacherAUserId,
+                teacherBUserId,
+                studentUserId);
         }
     }
 
@@ -260,12 +263,9 @@ public class TeacherResourceOwnershipIntegrationTests
         try
         {
             await setupContext.Users.AddAsync(CreateUser(teacherUserId, $"teacher-deleted-{suffix}"));
-            await setupContext.SaveChangesAsync();
 
             var teacher = new Teacher
             {
-                FirstName = "Teacher",
-                LastName = "Deleted-" + suffix,
                 UserId = teacherUserId,
                 IsActive = true
             };
@@ -306,12 +306,9 @@ public class TeacherResourceOwnershipIntegrationTests
         try
         {
             await setupContext.Users.AddAsync(CreateUser(adminUserId, $"admin-shared-{suffix}"));
-            await setupContext.SaveChangesAsync();
 
             var teacher = new Teacher
             {
-                FirstName = "Other",
-                LastName = "Teacher-" + suffix,
                 UserId = adminUserId,
                 IsActive = true
             };
@@ -354,12 +351,9 @@ public class TeacherResourceOwnershipIntegrationTests
         {
             await setupContext.Users.AddAsync(CreateUser(missingTeacherUserId, $"teacher-missing-regression-{suffix}"));
             await setupContext.Users.AddAsync(CreateUser(otherTeacherUserId, $"teacher-other-regression-{suffix}"));
-            await setupContext.SaveChangesAsync();
 
             var teacher = new Teacher
             {
-                FirstName = "Teacher",
-                LastName = "Other-" + suffix,
                 UserId = otherTeacherUserId,
                 IsActive = true
             };
@@ -379,7 +373,7 @@ public class TeacherResourceOwnershipIntegrationTests
             var groupService = CreateGroupService(missingTeacherUserId);
 
             await Assert.ThrowsAsync<NotFoundException>(() => groupService.GetByIdAsync(group.Id));
-            Assert.Empty(await groupService.GetAllAsync());
+            Assert.Empty((await groupService.GetAllAsync(new PaginationParameters())).Items);
         }
         finally
         {
@@ -405,8 +399,6 @@ public class TeacherResourceOwnershipIntegrationTests
 
             var teacher = new Teacher
             {
-                FirstName = "Teacher",
-                LastName = "Other-" + suffix,
                 UserId = otherTeacherUserId,
                 IsActive = true
             };
@@ -426,7 +418,7 @@ public class TeacherResourceOwnershipIntegrationTests
             var groupService = CreateGroupService(missingTeacherUserId);
 
             await Assert.ThrowsAsync<NotFoundException>(() => groupService.GetByIdAsync(group.Id));
-            Assert.Empty(await groupService.GetAllAsync());
+            Assert.Empty((await groupService.GetAllAsync(new PaginationParameters())).Items);
         }
         finally
         {
@@ -440,6 +432,7 @@ public class TeacherResourceOwnershipIntegrationTests
         var suffix = Guid.NewGuid().ToString("N")[..10];
         var missingTeacherUserId = Guid.NewGuid();
         var otherTeacherUserId = Guid.NewGuid();
+        var studentUserId = Guid.NewGuid();
 
         await using var setupContext = CreateContext(Guid.NewGuid());
         await setupContext.Database.MigrateAsync();
@@ -448,21 +441,25 @@ public class TeacherResourceOwnershipIntegrationTests
         {
             await setupContext.Users.AddAsync(CreateUser(missingTeacherUserId, $"teacher-missing-enroll-{suffix}"));
             await setupContext.Users.AddAsync(CreateUser(otherTeacherUserId, $"teacher-other-enroll-{suffix}"));
-            await setupContext.SaveChangesAsync();
 
             var teacher = new Teacher
             {
-                FirstName = "Teacher",
-                LastName = "Other-" + suffix,
                 UserId = otherTeacherUserId,
                 IsActive = true
             };
 
+            await setupContext.Users.AddAsync(
+                CreateUser(
+                    studentUserId,
+                    $"student-no-teacher-{suffix}",
+                    "Student",
+                    suffix));
+
+
             var student = new Student
             {
                 StudentCode = "NO-TEACHER-" + suffix,
-                FirstName = "Student",
-                LastName = suffix,
+                UserId = studentUserId,
                 Gender = Gender.Male,
                 IsActive = true
             };
@@ -496,6 +493,7 @@ public class TeacherResourceOwnershipIntegrationTests
             await setupContext.Groups.AddAsync(group);
             await setupContext.Enrollments.AddAsync(enrollment);
             await setupContext.StudentFees.AddAsync(fee);
+
             await setupContext.SaveChangesAsync();
 
             var enrollmentService = CreateEnrollmentService(missingTeacherUserId);
@@ -506,7 +504,11 @@ public class TeacherResourceOwnershipIntegrationTests
         }
         finally
         {
-            await CleanupUserAsync(missingTeacherUserId, otherTeacherUserId);
+            await CleanupUserAsync(
+                missingTeacherUserId,
+                otherTeacherUserId,
+                studentUserId);
+
         }
     }
 
@@ -556,22 +558,27 @@ public class TeacherResourceOwnershipIntegrationTests
         return new ApplicationDbContext(options, new TestCurrentUserService(currentUserId));
     }
 
-    private static ApplicationUser CreateUser(Guid userId, string userName)
+    private static ApplicationUser CreateUser(
+    Guid userId,
+    string userName,
+    string firstName = "Test",
+    string lastName = "User")
     {
         return new ApplicationUser
         {
             Id = userId,
             UserName = userName,
-            NormalizedUserName = userName,
+            NormalizedUserName = userName.ToUpperInvariant(),
             Email = $"{userName}@example.com",
-            NormalizedEmail = $"{userName}@example.com",
+            NormalizedEmail = $"{userName}@example.com".ToUpperInvariant(),
             EmailConfirmed = true,
             SecurityStamp = Guid.NewGuid().ToString(),
-            FirstName = userName,
-            LastName = "Test",
+            FirstName = firstName,
+            LastName = lastName,
             IsActive = true
         };
     }
+
 
     private static async Task CleanupUserAsync(params Guid[] userIds)
     {
@@ -581,112 +588,85 @@ public class TeacherResourceOwnershipIntegrationTests
         await using var cleanupContext = CreateContext(Guid.NewGuid());
 
         var distinctUserIds = userIds.Distinct().ToArray();
+
         var teacherIds = await cleanupContext.Teachers
-            .Where(x => x.UserId.HasValue && distinctUserIds.Contains(x.UserId.Value))
+            .IgnoreQueryFilters()
+            .Where(x => distinctUserIds.Contains(x.UserId))
             .Select(x => x.Id)
             .ToListAsync();
 
-        if (teacherIds.Count > 0)
-        {
-            var groupIds = await cleanupContext.Groups
-                .Where(x => teacherIds.Contains(x.TeacherId))
-                .Select(x => x.Id)
-                .ToListAsync();
-
-            if (groupIds.Count > 0)
-            {
-                var enrollmentIds = await cleanupContext.Enrollments
-                    .Where(x => groupIds.Contains(x.GroupId))
-                    .Select(x => x.Id)
-                    .ToListAsync();
-
-                if (enrollmentIds.Count > 0)
-                {
-                    var studentIds = await cleanupContext.Enrollments
-                        .Where(x => enrollmentIds.Contains(x.Id))
-                        .Select(x => x.StudentId)
-                        .Distinct()
-                        .ToListAsync();
-
-                    var feeIds = await cleanupContext.StudentFees
-                        .Where(x => enrollmentIds.Contains(x.EnrollmentId))
-                        .Select(x => x.Id)
-                        .ToListAsync();
-
-                    if (feeIds.Count > 0)
-                    {
-                        var payments = await cleanupContext.Payments
-                            .Where(x => feeIds.Contains(x.StudentFeeId))
-                            .ToListAsync();
-
-                        if (payments.Count > 0)
-                        {
-                            cleanupContext.Payments.RemoveRange(payments);
-                        }
-
-                        var studentFees = await cleanupContext.StudentFees
-                            .Where(x => feeIds.Contains(x.Id))
-                            .ToListAsync();
-
-                        if (studentFees.Count > 0)
-                        {
-                            cleanupContext.StudentFees.RemoveRange(studentFees);
-                        }
-                    }
-
-                    var enrollments = await cleanupContext.Enrollments
-                        .Where(x => enrollmentIds.Contains(x.Id))
-                        .ToListAsync();
-
-                    if (enrollments.Count > 0)
-                    {
-                        cleanupContext.Enrollments.RemoveRange(enrollments);
-                    }
-
-                    if (studentIds.Count > 0)
-                    {
-                        var students = await cleanupContext.Students
-                            .Where(x => studentIds.Contains(x.Id))
-                            .ToListAsync();
-
-                        if (students.Count > 0)
-                        {
-                            cleanupContext.Students.RemoveRange(students);
-                        }
-                    }
-                }
-
-                var groups = await cleanupContext.Groups
-                    .Where(x => groupIds.Contains(x.Id))
-                    .ToListAsync();
-
-                if (groups.Count > 0)
-                {
-                    cleanupContext.Groups.RemoveRange(groups);
-                }
-            }
-
-            var teachers = await cleanupContext.Teachers
-                .Where(x => teacherIds.Contains(x.Id))
-                .ToListAsync();
-
-            if (teachers.Count > 0)
-            {
-                cleanupContext.Teachers.RemoveRange(teachers);
-            }
-        }
-
-        var users = await cleanupContext.Users
-            .Where(x => distinctUserIds.Contains(x.Id))
+        var groupIds = await cleanupContext.Groups
+            .IgnoreQueryFilters()
+            .Where(x => teacherIds.Contains(x.TeacherId))
+            .Select(x => x.Id)
             .ToListAsync();
 
-        if (users.Count > 0)
-        {
-            cleanupContext.Users.RemoveRange(users);
-        }
+        var enrollmentIds = await cleanupContext.Enrollments
+            .IgnoreQueryFilters()
+            .Where(x => groupIds.Contains(x.GroupId))
+            .Select(x => x.Id)
+            .ToListAsync();
 
-        await cleanupContext.SaveChangesAsync();
+        var enrollmentStudentIds = await cleanupContext.Enrollments
+            .IgnoreQueryFilters()
+            .Where(x => enrollmentIds.Contains(x.Id))
+            .Select(x => x.StudentId)
+            .Distinct()
+            .ToListAsync();
+
+        // ==========================================
+        // Students directly belonging to users
+        // ==========================================
+
+        var directStudentIds = await cleanupContext.Students
+            .IgnoreQueryFilters()
+            .Where(x => distinctUserIds.Contains(x.UserId))
+            .Select(x => x.Id)
+            .ToListAsync();
+
+        var studentIds = enrollmentStudentIds
+            .Concat(directStudentIds)
+            .Distinct()
+            .ToArray();
+
+        var feeIds = await cleanupContext.StudentFees
+            .IgnoreQueryFilters()
+            .Where(x => enrollmentIds.Contains(x.EnrollmentId))
+            .Select(x => x.Id)
+            .ToListAsync();
+
+        if (feeIds.Count > 0)
+            await cleanupContext.Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM \"Payments\" WHERE \"StudentFeeId\" = ANY({feeIds.ToArray()})");
+
+        if (feeIds.Count > 0)
+            await cleanupContext.Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM \"StudentFees\" WHERE \"Id\" = ANY({feeIds.ToArray()})");
+
+        if (enrollmentIds.Count > 0)
+            await cleanupContext.Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM \"Attendances\" WHERE \"EnrollmentId\" = ANY({enrollmentIds.ToArray()})");
+
+        if (enrollmentIds.Count > 0)
+            await cleanupContext.Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM \"Enrollments\" WHERE \"Id\" = ANY({enrollmentIds.ToArray()})");
+
+        if (studentIds.Length > 0)
+            await cleanupContext.Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM \"Students\" WHERE \"Id\" = ANY({studentIds})");
+
+        if (groupIds.Count > 0)
+            await cleanupContext.Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM \"Groups\" WHERE \"Id\" = ANY({groupIds.ToArray()})");
+
+        if (teacherIds.Count > 0)
+            await cleanupContext.Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM \"Teachers\" WHERE \"Id\" = ANY({teacherIds.ToArray()})");
+
+        await cleanupContext.Database.ExecuteSqlInterpolatedAsync(
+            $"DELETE FROM \"AspNetUsers\" WHERE \"Id\" = ANY({distinctUserIds})");
     }
+
 
     private sealed class TestCurrentUserService(Guid currentUserId, bool isAdmin = false) : ICurrentUserService
     {

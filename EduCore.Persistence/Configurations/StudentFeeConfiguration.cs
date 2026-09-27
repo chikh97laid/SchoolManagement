@@ -26,8 +26,7 @@ namespace EduCore.Persistence.Configurations
                 .HasDefaultValue(0);
 
             builder.Property(x => x.Status)
-                .HasConversion<int>()
-                .HasDefaultValue(StudentFeeStatus.Pending);
+                .HasConversion<int>();
 
             builder.Property(x => x.Description)
                 .HasMaxLength(300);

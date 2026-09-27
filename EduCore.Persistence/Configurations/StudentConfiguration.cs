@@ -21,14 +21,6 @@ namespace EduCore.Persistence.Configurations
             builder.HasIndex(x => x.StudentCode)
                 .IsUnique();
 
-            builder.Property(x => x.FirstName)
-                .IsRequired()
-                .HasMaxLength(50);
-
-            builder.Property(x => x.LastName)
-                .IsRequired()
-                .HasMaxLength(50);
-
             builder.Property(x => x.GuardianName)
                 .HasMaxLength(100);
 

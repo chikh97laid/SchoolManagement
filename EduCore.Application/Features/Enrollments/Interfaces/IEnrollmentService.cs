@@ -1,4 +1,5 @@
 ﻿using EduCore.Application.Features.Enrollments.DTOs;
+using EduCore.Application.Common.Pagination;
 
 namespace EduCore.Application.Features.Enrollments.Interfaces;
 
@@ -12,7 +13,8 @@ public interface IEnrollmentService
         int id,
         CancellationToken cancellationToken = default);
 
-    Task<IEnumerable<EnrollmentResponse>> GetAllAsync(
+    Task<PagedResult<EnrollmentResponse>> GetAllAsync(
+        PaginationParameters parameters,
         CancellationToken cancellationToken = default);
 
     Task DeactivateAsync(
@@ -20,6 +22,10 @@ public interface IEnrollmentService
         CancellationToken cancellationToken = default);
 
     Task ActivateAsync(
+        int id,
+        CancellationToken cancellationToken = default);
+
+    Task SoftDeleteAsync(
         int id,
         CancellationToken cancellationToken = default);
 }

@@ -27,7 +27,7 @@ public class TeacherProfile : Profile
             .ForMember(
                 dest => dest.FullName,
                 opt => opt.MapFrom(
-                    src => $"{src.FirstName} {src.LastName}"))
+                    src => $"{src.User.FirstName}   {src.User.LastName}"))
             .ForMember(
                 dest => dest.UserName,
                 opt => opt.MapFrom(

@@ -5,9 +5,6 @@ using EduCore.Domain.Identity;
 namespace EduCore.Domain.Entities;
 public class Teacher : BaseEntity
 {
-    public string FirstName { get; set; } = string.Empty;
-
-    public string LastName { get; set; } = string.Empty;
 
     public string? Specialization { get; set; }
 
@@ -15,9 +12,9 @@ public class Teacher : BaseEntity
 
     public bool IsActive { get; set; } = true;
 
-    public Guid? UserId { get; set; }
+    public Guid UserId { get; set; }
 
-    public ApplicationUser? User { get; set; }
+    public ApplicationUser User { get; set; } = null!;
 
     public ICollection<Group> Groups { get; set; } = [];
 }

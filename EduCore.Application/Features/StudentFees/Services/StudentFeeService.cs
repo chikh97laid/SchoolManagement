@@ -1,11 +1,13 @@
 ﻿using AutoMapper;
+using EduCore.Application.Common;
 using EduCore.Application.Common.Exceptions;
 using EduCore.Application.Common.Interfaces;
+using EduCore.Application.Common.Pagination;
 using EduCore.Application.Features.StudentFees.DTOs;
 using EduCore.Application.Features.StudentFees.Interfaces;
 using EduCore.Domain.Entities;
+using EduCore.Domain.Entities.Enums;
 using EduCore.Domain.Interfaces.Repositories;
-using EduCore.Application.Common;
 
 namespace EduCore.Application.Features.StudentFees.Services;
 
@@ -36,7 +38,7 @@ public class StudentFeeService : IStudentFeeService
 
         var teacher = await _unitOfWork.Teachers
             .FirstOrDefaultAsync(
-                x => x.UserId == _currentUserService.UserId && !x.IsDeleted,
+                x => x.UserId == _currentUserService.UserId,
                 false,
                 cancellationToken);
 
@@ -49,7 +51,7 @@ public class StudentFeeService : IStudentFeeService
     {
         var enrollment = await _unitOfWork.Enrollments
             .FirstOrDefaultAsync(
-                x => x.Id == request.EnrollmentId && !x.IsDeleted,
+                x => x.Id == request.EnrollmentId,
                 false,
                 cancellationToken);
 
@@ -88,15 +90,16 @@ public class StudentFeeService : IStudentFeeService
         {
             var fee = await _unitOfWork.StudentFees
                 .FirstOrDefaultAsync(
-                    x => x.Id == id && !x.IsDeleted,
+                    x => x.Id == id,
                     false,
                     cancellationToken,
                     x => x.Enrollment,
                     x => x.Enrollment.Student,
+                    x => x.Enrollment.Student.User,
                     x => x.Enrollment.Group,
                     x => x.Enrollment.Group.Teacher);
 
-            if (fee is null || fee.IsDeleted)
+            if (fee is null)
                 throw new NotFoundException(ErrorCodes.StudentFee.NotFound);
 
             return _mapper.Map<StudentFeeResponse>(fee);
@@ -106,7 +109,7 @@ public class StudentFeeService : IStudentFeeService
         {
             var currentStudent = await _unitOfWork.Students
                 .FirstOrDefaultAsync(
-                    x => x.UserId == _currentUserService.UserId && !x.IsDeleted,
+                    x => x.UserId == _currentUserService.UserId,
                     false,
                     cancellationToken);
 
@@ -116,16 +119,16 @@ public class StudentFeeService : IStudentFeeService
             var studentFee = await _unitOfWork.StudentFees
                 .FirstOrDefaultAsync(
                     x => x.Id == id
-                        && !x.IsDeleted
                         && x.Enrollment.StudentId == currentStudent.Id,
                     false,
                     cancellationToken,
                     x => x.Enrollment,
                     x => x.Enrollment.Student,
+                    x => x.Enrollment.Student.User,
                     x => x.Enrollment.Group,
                     x => x.Enrollment.Group.Teacher);
 
-            if (studentFee is null || studentFee.IsDeleted)
+            if (studentFee is null)
                 throw new NotFoundException(ErrorCodes.StudentFee.NotFound);
 
             return _mapper.Map<StudentFeeResponse>(studentFee);
@@ -143,31 +146,48 @@ public class StudentFeeService : IStudentFeeService
             var teacherFee = await _unitOfWork.StudentFees
                 .FirstOrDefaultAsync(
                     x => x.Id == id
-                        && !x.IsDeleted
                         && x.Enrollment.Group.TeacherId == currentTeacherId.Value,
                     false,
                     cancellationToken,
                     x => x.Enrollment,
                     x => x.Enrollment.Student,
+                    x => x.Enrollment.Student.User,
                     x => x.Enrollment.Group,
                     x => x.Enrollment.Group.Teacher);
 
-            if (teacherFee is null || teacherFee.IsDeleted)
+            if (teacherFee is null)
                 throw new NotFoundException(ErrorCodes.StudentFee.NotFound);
 
             return _mapper.Map<StudentFeeResponse>(teacherFee);
         }
 
-        throw new ForbiddenException(ErrorCodes.User.NotFound);
+        throw new NotFoundException(ErrorCodes.User.NotFound);
     }
 
-    public async Task<IEnumerable<StudentFeeResponse>> GetAllAsync(
+    public async Task<PagedResult<StudentFeeResponse>> GetAllAsync(
+        PaginationParameters parameters,
         CancellationToken cancellationToken = default)
     {
-        var fees = await _unitOfWork.StudentFees
-            .GetAllWithDetailsAsync(cancellationToken);
+        var (fees, totalCount) = await _unitOfWork.StudentFees
+            .GetPagedAsync(
+                x => true,
+                x => x.Id,
+                parameters.PageNumber,
+                parameters.PageSize,
+                false,
+                cancellationToken,
+                x => x.Enrollment,
+                x => x.Enrollment.Student,
+                x => x.Enrollment.Student.User,
+                x => x.Enrollment.Group);
 
-        return _mapper.Map<IEnumerable<StudentFeeResponse>>(fees);
+        return new PagedResult<StudentFeeResponse>
+        {
+            Items = _mapper.Map<List<StudentFeeResponse>>(fees),
+            PageNumber = parameters.PageNumber,
+            PageSize = parameters.PageSize,
+            TotalCount = totalCount
+        };
     }
 
     public async Task<IEnumerable<StudentFeeResponse>> GetByStudentAsync(
@@ -201,7 +221,7 @@ public class StudentFeeService : IStudentFeeService
     {
         var fee = await _unitOfWork.StudentFees
             .FirstOrDefaultAsync(
-                x => x.Id == id && !x.IsDeleted,
+                x => x.Id == id,
                 trackChanges: true,
                 cancellationToken,
                 includes: x => x.Payments);
@@ -211,10 +231,11 @@ public class StudentFeeService : IStudentFeeService
 
         // Do not allow changing the amount
         // after payments have already been recorded.
-        if (fee.Payments.Any() &&
+        if (fee.Payments.Any(x => x.Status != PaymentStatus.Cancelled) &&
             fee.TotalAmount != request.TotalAmount)
         {
-            throw new BadRequestException(ErrorCodes.StudentFee.CannotChangeAmountWithPayments);
+            throw new BadRequestException(
+                ErrorCodes.StudentFee.CannotChangeAmountWithPayments);
         }
 
         _mapper.Map(request, fee);
@@ -238,15 +259,22 @@ public class StudentFeeService : IStudentFeeService
     {
         var fee = await _unitOfWork.StudentFees
             .FirstOrDefaultAsync(
-                x => x.Id == id && !x.IsDeleted,
+                x => x.Id == id,
                 trackChanges: true,
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken,
+                x => x.Payments);
 
         if (fee is null)
             throw new NotFoundException(ErrorCodes.StudentFee.NotFound);
 
+        if (fee.Payments.Any(x => x.Status != PaymentStatus.Cancelled))
+            throw new BadRequestException(ErrorCodes.StudentFee.CannotDeleteWithPayments);
+
         fee.IsDeleted = true;
         fee.DeletedAt = DateTime.UtcNow;
+        fee.DeletedBy = _currentUserService.IsAuthenticated
+            ? _currentUserService.UserId
+            : null;
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }

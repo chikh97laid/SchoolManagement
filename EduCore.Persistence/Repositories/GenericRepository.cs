@@ -77,6 +77,42 @@ namespace EduCore.Persistence.Repositories
             return await query.Where(predicate).ToListAsync(cancellationToken);
         }
 
+        public async Task<(IEnumerable<T> Items, int TotalCount)> GetPagedAsync<TKey>(
+            Expression<Func<T, bool>> predicate,
+            Expression<Func<T, TKey>> orderBy,
+            int pageNumber,
+            int pageSize,
+            bool trackChanges = false,
+            CancellationToken cancellationToken = default,
+            params Expression<Func<T, object?>>[] includes)
+        {
+            IQueryable<T> query = trackChanges
+                ? _dbSet
+                : _dbSet.AsNoTracking();
+
+            if (includes != null && includes.Length > 0)
+            {
+                foreach (var include in includes)
+                {
+                    query = query.Include(include);
+                }
+            }
+
+            query = query.Where(predicate);
+
+            var totalCount = await query.CountAsync(cancellationToken);
+            var skip = (int)Math.Min((long)(pageNumber - 1) * pageSize, int.MaxValue);
+
+            var items = await query
+                .OrderBy(orderBy)
+                .Skip(skip)
+                .Take(pageSize)
+                .ToListAsync(cancellationToken);
+
+            return (items, totalCount);
+        }
+
+
         public async Task AddAsync(T entity, CancellationToken cancellationToken = default)
         {
             await _dbSet.AddAsync(entity, cancellationToken);

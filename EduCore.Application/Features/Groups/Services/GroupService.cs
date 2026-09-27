@@ -1,6 +1,7 @@
 ﻿using AutoMapper;
 using EduCore.Application.Common.Exceptions;
 using EduCore.Application.Common.Interfaces;
+using EduCore.Application.Common.Pagination;
 using EduCore.Application.Features.Groups.DTOs;
 using EduCore.Application.Features.Groups.Interfaces;
 using EduCore.Domain.Interfaces.Repositories;
@@ -36,7 +37,7 @@ public class GroupService : IGroupService
 
         var teacher = await _unitOfWork.Teachers
             .FirstOrDefaultAsync(
-                x => x.UserId == _currentUserService.UserId && !x.IsDeleted,
+                x => x.UserId == _currentUserService.UserId,
                 false,
                 cancellationToken);
 
@@ -49,14 +50,16 @@ public class GroupService : IGroupService
     {
         var teacher = await _unitOfWork.Teachers
             .FirstOrDefaultAsync(
-                x => (x.Id == request.TeacherId && !x.IsDeleted && x.IsActive),
-                     true,
-                     cancellationToken);
+                x => x.Id == request.TeacherId && x.IsActive,
+                trackChanges: true,
+                cancellationToken: cancellationToken,
+                x => x.User);
 
         if (teacher is null)
             throw new BadRequestException(ErrorCodes.Group.GroupNoTeacher);
 
         var group = _mapper.Map<Group>(request);
+        group.Teacher = teacher;
 
         group.IsActive = true;
 
@@ -78,10 +81,11 @@ public class GroupService : IGroupService
         {
             var group = await _unitOfWork.Groups
                 .FirstOrDefaultAsync(
-                    x => x.Id == id && !x.IsDeleted,
+                    x => x.Id == id,
                     false,
                     cancellationToken,
-                    x => x.Teacher);
+                    x => x.Teacher,
+                    x => x.Teacher.User);
 
             if (group is null)
                 throw new NotFoundException(ErrorCodes.Group.NotFound);
@@ -101,11 +105,11 @@ public class GroupService : IGroupService
             var teacherGroup = await _unitOfWork.Groups
                 .FirstOrDefaultAsync(
                     x => x.Id == id
-                        && !x.IsDeleted
                         && x.TeacherId == currentTeacherId.Value,
                     false,
                     cancellationToken,
-                    x => x.Teacher);
+                    x => x.Teacher,
+                    x => x.Teacher.User);
 
             if (teacherGroup is null)
                 throw new NotFoundException(ErrorCodes.Group.NotFound);
@@ -113,22 +117,33 @@ public class GroupService : IGroupService
             return _mapper.Map<GroupResponse>(teacherGroup);
         }
 
-        throw new ForbiddenException(ErrorCodes.User.Forbidden);
+        throw new NotFoundException(ErrorCodes.User.NotFound);
     }
 
-    public async Task<IEnumerable<GroupResponse>> GetAllAsync(
+    public async Task<PagedResult<GroupResponse>> GetAllAsync(
+        PaginationParameters parameters,
         CancellationToken cancellationToken = default)
     {
         if (_currentUserService.IsAdmin)
         {
-            var groups = await _unitOfWork.Groups
-                .FindAsync(
-                    x => !x.IsDeleted,
+            var (groups, totalCount) = await _unitOfWork.Groups
+                .GetPagedAsync(
+                    x => true,
+                    x => x.Id,
+                    parameters.PageNumber,
+                    parameters.PageSize,
                     false,
                     cancellationToken,
-                    x => x.Teacher);
+                    x => x.Teacher,
+                    x => x.Teacher.User);
 
-            return _mapper.Map<IEnumerable<GroupResponse>>(groups);
+            return new PagedResult<GroupResponse>
+            {
+                Items = _mapper.Map<List<GroupResponse>>(groups),
+                PageNumber = parameters.PageNumber,
+                PageSize = parameters.PageSize,
+                TotalCount = totalCount
+            };
         }
 
         if(_currentUserService.IsTeacher)
@@ -137,19 +152,34 @@ public class GroupService : IGroupService
 
             if (currentTeacherId is null)
             {
-                return [];
+                return new PagedResult<GroupResponse>
+                {
+                    PageNumber = parameters.PageNumber,
+                    PageSize = parameters.PageSize
+                };
             }
 
-            var teacherGroups = await _unitOfWork.Groups
-                .FindAsync(
-                    x => !x.IsDeleted && x.TeacherId == currentTeacherId.Value,
+            var (teacherGroups, totalCount) = await _unitOfWork.Groups
+                .GetPagedAsync(
+                    x => x.TeacherId == currentTeacherId.Value,
+                    x => x.Id,
+                    parameters.PageNumber,
+                    parameters.PageSize,
                     false,
                     cancellationToken,
-                    x => x.Teacher);
+                    x => x.Teacher,
+                    x => x.Teacher.User);
 
-            return _mapper.Map<IEnumerable<GroupResponse>>(teacherGroups);
+            return new PagedResult<GroupResponse>
+            {
+                Items = _mapper.Map<List<GroupResponse>>(teacherGroups),
+                PageNumber = parameters.PageNumber,
+                PageSize = parameters.PageSize,
+                TotalCount = totalCount
+            };
         }
-        throw new ForbiddenException(ErrorCodes.User.Forbidden);
+
+        throw new NotFoundException(ErrorCodes.User.NotFound);
     }
 
     public async Task<GroupResponse> UpdateAsync(
@@ -159,17 +189,18 @@ public class GroupService : IGroupService
     {
         var group = await _unitOfWork.Groups
             .FirstOrDefaultAsync(
-                x => x.Id == id && !x.IsDeleted,
+                x => x.Id == id,
                 true,
                 cancellationToken,
-                x => x.Teacher);
+                x => x.Teacher,
+                x => x.Teacher.User);
 
         if (group is null)
             throw new NotFoundException(ErrorCodes.Group.NotFound);
 
         var teacher = await _unitOfWork.Teachers
             .FirstOrDefaultAsync(
-                x => (x.Id == request.TeacherId && !x.IsDeleted && x.IsActive),
+                x => (x.Id == request.TeacherId && x.IsActive),
                 false,
                 cancellationToken);
 
@@ -190,7 +221,7 @@ public class GroupService : IGroupService
     {
         var group = await _unitOfWork.Groups
             .FirstOrDefaultAsync(
-                x => x.Id == id && !x.IsDeleted,
+                x => x.Id == id,
                 true,
                 cancellationToken);
 
@@ -209,16 +240,47 @@ public class GroupService : IGroupService
     {
         var group = await _unitOfWork.Groups
             .FirstOrDefaultAsync(
-                x => x.Id == id && !x.IsDeleted,
+                x => x.Id == id,
                 true,
                 cancellationToken);
 
         if (group is null)
             throw new NotFoundException(ErrorCodes.Group.NotFound);
 
+        if (!await _unitOfWork.Teachers.ExistsAsync(
+        x => x.Id == group.TeacherId && x.IsActive,
+        cancellationToken))
+        {
+            throw new BadRequestException(
+                ErrorCodes.Group.GroupNoTeacher);
+        }
+
         group.IsActive = true;
 
         await _unitOfWork.SaveChangesAsync(
             cancellationToken);
+    }
+
+    public async Task SoftDeleteAsync(
+        int id,
+        CancellationToken cancellationToken = default)
+    {
+        var group = await _unitOfWork.Groups
+            .FirstOrDefaultAsync(
+                x => x.Id == id,
+                trackChanges: true,
+                cancellationToken: cancellationToken);
+
+        if (group is null)
+            throw new NotFoundException(ErrorCodes.Group.NotFound);
+
+        group.IsActive = false;
+        group.IsDeleted = true;
+        group.DeletedAt = DateTime.UtcNow;
+        group.DeletedBy = _currentUserService.IsAuthenticated
+            ? _currentUserService.UserId
+            : null;
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 }

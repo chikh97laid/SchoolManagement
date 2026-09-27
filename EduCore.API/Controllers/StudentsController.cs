@@ -1,6 +1,7 @@
 ﻿using EduCore.Application.Features.StudentManagement.DTOs;
 using EduCore.Application.Features.StudentManagement.DTOs.Student;
 using EduCore.Application.Features.StudentManagement.Interfaces;
+using EduCore.Application.Common.Pagination;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using EduCore.Shared.Constants;
@@ -41,11 +42,13 @@ public class StudentsController : ControllerBase
     // GET: api/StudentManagement
     [Authorize(Roles = $"{Roles.Admin},{Roles.Teacher}")]
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<StudentResponse>>> GetStudents(
+    public async Task<ActionResult<PagedResult<StudentResponse>>> GetStudents(
+        [FromQuery] PaginationParameters parameters,
         CancellationToken cancellationToken)
     {
         var result =
             await _studentService.GetStudentsAsync(
+                parameters,
                 cancellationToken);
 
         return Ok(result);
@@ -95,6 +98,16 @@ public class StudentsController : ControllerBase
                 id,
                 cancellationToken);
 
+        return NoContent();
+    }
+
+    [Authorize(Roles = Roles.Admin)]
+    [HttpPatch("{id:int}/soft-delete")]
+    public async Task<IActionResult> SoftDeleteStudent(
+        int id,
+        CancellationToken cancellationToken)
+    {
+        await _studentService.SoftDeleteStudentAsync(id, cancellationToken);
         return NoContent();
     }
 

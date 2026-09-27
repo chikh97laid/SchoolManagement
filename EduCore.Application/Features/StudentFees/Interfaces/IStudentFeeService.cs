@@ -1,4 +1,5 @@
 ﻿using EduCore.Application.Features.StudentFees.DTOs;
+using EduCore.Application.Common.Pagination;
 
 namespace EduCore.Application.Features.StudentFees.Interfaces;
 
@@ -12,7 +13,8 @@ public interface IStudentFeeService
         int id,
         CancellationToken cancellationToken = default);
 
-    Task<IEnumerable<StudentFeeResponse>> GetAllAsync(
+    Task<PagedResult<StudentFeeResponse>> GetAllAsync(
+        PaginationParameters parameters,
         CancellationToken cancellationToken = default);
 
     Task<IEnumerable<StudentFeeResponse>> GetByStudentAsync(

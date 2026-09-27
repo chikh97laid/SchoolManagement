@@ -7,6 +7,7 @@ using EduCore.Application.Features.Payments.Mapping;
 using EduCore.Application.Features.Payments.Services;
 using EduCore.Domain.Entities;
 using EduCore.Domain.Entities.Enums;
+using EduCore.Domain.Identity;
 using EduCore.Persistence.Context;
 using EduCore.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -26,6 +27,8 @@ public class PaymentConcurrencyIntegrationTests
         var groupId = 0;
         var studentId = 0;
         var teacherId = 0;
+        var teacherUserId = Guid.Empty;
+        var studentUserId = Guid.Empty;
         Task<PaymentResponse>? firstTask = null;
         Task<PaymentResponse>? secondTask = null;
 
@@ -35,28 +38,65 @@ public class PaymentConcurrencyIntegrationTests
             await setupContext.Database.MigrateAsync();
 
             var suffix = Guid.NewGuid().ToString("N")[..12];
+
+            teacherUserId = Guid.NewGuid();
+            studentUserId = Guid.NewGuid();
+
+            var teacherUser = new ApplicationUser
+            {
+                Id = teacherUserId,
+                UserName = $"teacher-concurrency-{suffix}",
+                NormalizedUserName = $"TEACHER-CONCURRENCY-{suffix}",
+                Email = $"teacher-concurrency-{suffix}@example.com",
+                NormalizedEmail = $"TEACHER-CONCURRENCY-{suffix}@EXAMPLE.COM",
+                EmailConfirmed = true,
+                SecurityStamp = Guid.NewGuid().ToString(),
+                FirstName = "Concurrency",
+                LastName = $"Teacher-{suffix}",
+                IsActive = true
+            };
+
+            var studentUser = new ApplicationUser
+            {
+                Id = studentUserId,
+                UserName = $"student-concurrency-{suffix}",
+                NormalizedUserName = $"STUDENT-CONCURRENCY-{suffix}",
+                Email = $"student-concurrency-{suffix}@example.com",
+                NormalizedEmail = $"STUDENT-CONCURRENCY-{suffix}@EXAMPLE.COM",
+                EmailConfirmed = true,
+                SecurityStamp = Guid.NewGuid().ToString(),
+                FirstName = "Concurrency",
+                LastName = $"Student-{suffix}",
+                IsActive = true
+            };
+
+            setupContext.Users.AddRange(teacherUser, studentUser);
+
             var teacher = new Teacher
             {
-                FirstName = "Concurrency",
-                LastName = suffix
+                UserId = teacherUserId,
+                IsActive = true
             };
+
             var group = new Group
             {
                 Name = $"Concurrency-{suffix}",
                 StandardFee = 3000,
-                Teacher = teacher
+                Teacher = teacher,
+                IsActive = true
             };
             var student = new Student
             {
                 StudentCode = $"CONC-{suffix}",
-                FirstName = "Concurrency",
-                LastName = suffix,
-                Gender = Gender.Male
+                UserId = studentUserId,
+                Gender = Gender.Male,
+                IsActive = true
             };
             var enrollment = new Enrollment
             {
                 Student = student,
-                Group = group
+                Group = group,
+                IsActive = true
             };
             var fee = new StudentFee
             {
@@ -169,7 +209,9 @@ public class PaymentConcurrencyIntegrationTests
                 enrollmentId,
                 groupId,
                 studentId,
-                teacherId);
+                teacherId,
+                teacherUserId,
+                studentUserId);
         }
     }
 
@@ -240,24 +282,50 @@ public class PaymentConcurrencyIntegrationTests
             int enrollmentId,
             int groupId,
             int studentId,
-            int teacherId)
+            int teacherId,
+            Guid teacherUserId,
+            Guid studentUserId)
         {
-            if (feeId == 0)
+            if (feeId == 0 && teacherUserId == Guid.Empty && studentUserId == Guid.Empty)
                 return;
 
             await using var cleanupContext = CreateContext();
-            await cleanupContext.Database.ExecuteSqlInterpolatedAsync(
-                $"DELETE FROM \"Payments\" WHERE \"StudentFeeId\" = {feeId}");
-            await cleanupContext.Database.ExecuteSqlInterpolatedAsync(
-                $"DELETE FROM \"StudentFees\" WHERE \"Id\" = {feeId}");
-            await cleanupContext.Database.ExecuteSqlInterpolatedAsync(
-                $"DELETE FROM \"Enrollments\" WHERE \"Id\" = {enrollmentId}");
-            await cleanupContext.Database.ExecuteSqlInterpolatedAsync(
-                $"DELETE FROM \"Groups\" WHERE \"Id\" = {groupId}");
-            await cleanupContext.Database.ExecuteSqlInterpolatedAsync(
-                $"DELETE FROM \"Students\" WHERE \"Id\" = {studentId}");
-            await cleanupContext.Database.ExecuteSqlInterpolatedAsync(
-                $"DELETE FROM \"Teachers\" WHERE \"Id\" = {teacherId}");
+            if (feeId != 0)
+            {
+                await cleanupContext.Database.ExecuteSqlInterpolatedAsync(
+                    $"DELETE FROM \"Payments\" WHERE \"StudentFeeId\" = {feeId}");
+                await cleanupContext.Database.ExecuteSqlInterpolatedAsync(
+                    $"DELETE FROM \"StudentFees\" WHERE \"Id\" = {feeId}");
+            }
+
+            if (enrollmentId != 0)
+            {
+                await cleanupContext.Database.ExecuteSqlInterpolatedAsync(
+                    $"DELETE FROM \"Attendances\" WHERE \"EnrollmentId\" = {enrollmentId}");
+                await cleanupContext.Database.ExecuteSqlInterpolatedAsync(
+                    $"DELETE FROM \"Enrollments\" WHERE \"Id\" = {enrollmentId}");
+            }
+
+            if (groupId != 0)
+                await cleanupContext.Database.ExecuteSqlInterpolatedAsync(
+                    $"DELETE FROM \"Groups\" WHERE \"Id\" = {groupId}");
+
+            if (studentId != 0)
+                await cleanupContext.Database.ExecuteSqlInterpolatedAsync(
+                    $"DELETE FROM \"Students\" WHERE \"Id\" = {studentId}");
+
+            if (teacherId != 0)
+                await cleanupContext.Database.ExecuteSqlInterpolatedAsync(
+                    $"DELETE FROM \"Teachers\" WHERE \"Id\" = {teacherId}");
+
+            var userIds = new[] { teacherUserId, studentUserId }
+                .Where(x => x != Guid.Empty)
+                .Distinct()
+                .ToArray();
+
+            if (userIds.Length > 0)
+                await cleanupContext.Database.ExecuteSqlInterpolatedAsync(
+                    $"DELETE FROM \"AspNetUsers\" WHERE \"Id\" = ANY({userIds})");
         }
 
         private static ApplicationDbContext CreateContext(

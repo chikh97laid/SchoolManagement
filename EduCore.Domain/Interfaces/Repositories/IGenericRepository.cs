@@ -15,6 +15,17 @@ namespace EduCore.Domain.Interfaces.Repositories
             CancellationToken cancellationToken = default,
             params Expression<Func<T, object?>>[] includes);
 
+        Task<(IEnumerable<T> Items, int TotalCount)> GetPagedAsync<TKey>(
+            Expression<Func<T, bool>> predicate,
+            Expression<Func<T, TKey>> orderBy,
+            int pageNumber,
+            int pageSize,
+            bool trackChanges = false,
+            CancellationToken cancellationToken = default,
+            params Expression<Func<T, object?>>[] includes);
+
+
+
         Task<IEnumerable<T>> FindAsync(Expression<Func<T, bool>> predicate, bool trackChanges = false,
             CancellationToken cancellationToken = default,
             params Expression<Func<T, object?>>[] includes);    

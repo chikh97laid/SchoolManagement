@@ -1,5 +1,6 @@
 ﻿using EduCore.Application.Features.StudentFees.DTOs;
 using EduCore.Application.Features.StudentFees.Interfaces;
+using EduCore.Application.Common.Pagination;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using EduCore.Shared.Constants;
@@ -50,10 +51,12 @@ public class StudentFeesController : ControllerBase
 
     [HttpGet]
     [Authorize(Roles = Roles.Admin)]
-    public async Task<ActionResult<IEnumerable<StudentFeeResponse>>> GetAll(
+    public async Task<ActionResult<PagedResult<StudentFeeResponse>>> GetAll(
+        [FromQuery] PaginationParameters parameters,
         CancellationToken cancellationToken)
     {
         var result = await _studentFeeService.GetAllAsync(
+            parameters,
             cancellationToken);
 
         return Ok(result);

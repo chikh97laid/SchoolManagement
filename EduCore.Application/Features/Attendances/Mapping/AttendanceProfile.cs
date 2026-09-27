@@ -18,7 +18,7 @@ public class AttendanceProfile : Profile
             .ForMember(
                 dest => dest.StudentName,
                 opt => opt.MapFrom(src =>
-                    $"{src.Enrollment.Student.FirstName} {src.Enrollment.Student.LastName}"))
+                    $"{src.Enrollment.Student.User.FirstName} {src.Enrollment.Student.User.LastName}"))
             .ForMember(
                 dest => dest.GroupId,
                 opt => opt.MapFrom(src => src.Enrollment.GroupId))

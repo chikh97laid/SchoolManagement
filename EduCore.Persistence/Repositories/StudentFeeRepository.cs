@@ -36,10 +36,9 @@ public class StudentFeeRepository
         return await _context.StudentFees
                         .Include(x => x.Enrollment)
                             .ThenInclude(x => x.Student)
-
+                                .ThenInclude(x => x.User)
                         .Include(x => x.Enrollment)
                             .ThenInclude(x => x.Group)
-                        .Where(x => !x.IsDeleted)
                         .AsNoTracking()
                         .ToListAsync(cancellationToken);
     }
@@ -49,11 +48,10 @@ public class StudentFeeRepository
         return await _context.StudentFees
                         .Include(x => x.Enrollment)
                             .ThenInclude(x => x.Student)
-
+                                .ThenInclude(x => x.User)
                         .Include(x => x.Enrollment)
                             .ThenInclude(x => x.Group)
-                        
-                        .Where(x => x.EnrollmentId == enrollmentId && !x.IsDeleted)
+                        .Where(x => x.EnrollmentId == enrollmentId)
                         .AsNoTracking()
                         .ToListAsync(cancellationToken);
     }
@@ -63,11 +61,10 @@ public class StudentFeeRepository
         return await _context.StudentFees
             .Include(x => x.Enrollment)
                 .ThenInclude(x => x.Student)
-
+                    .ThenInclude(x => x.User)
             .Include(x => x.Enrollment)
                 .ThenInclude(x => x.Group)
-
-            .Where(x => x.Enrollment.StudentId == studentId && !x.IsDeleted)
+            .Where(x => x.Enrollment.StudentId == studentId)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
     }
@@ -77,9 +74,9 @@ public class StudentFeeRepository
         return await _context.StudentFees
             .Include(x => x.Enrollment)
                 .ThenInclude(x => x.Student)
+                    .ThenInclude(x => x.User)
             .Include(x => x.Enrollment)
                 .ThenInclude(x => x.Group)
-            .Where(x => !x.IsDeleted)
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
     }

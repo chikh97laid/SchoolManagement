@@ -1,5 +1,6 @@
 ﻿
 using EduCore.Application.Features.Payments.DTOs;
+using EduCore.Application.Common.Pagination;
 
 namespace EduCore.Application.Features.Payments.Interfaces;
 
@@ -9,8 +10,9 @@ public interface IPaymentService
         CreatePaymentRequest request,
         CancellationToken cancellationToken = default);
 
-    Task<IEnumerable<PaymentResponse>> GetAllAsync(
-    CancellationToken cancellationToken = default);
+    Task<PagedResult<PaymentResponse>> GetAllAsync(
+        PaginationParameters parameters,
+        CancellationToken cancellationToken = default);
 
     Task<PaymentResponse> GetByIdAsync(
         int id,
@@ -28,5 +30,9 @@ public interface IPaymentService
     Task CancelAsync(
     int id,
     CancellationToken cancellationToken = default);
+
+    Task SoftDeleteAsync(
+        int id,
+        CancellationToken cancellationToken = default);
 
 }

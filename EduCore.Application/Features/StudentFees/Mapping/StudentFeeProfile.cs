@@ -20,7 +20,7 @@ public class StudentFeeProfile : Profile
             .ForMember(
                 dest => dest.StudentName,
                 opt => opt.MapFrom(
-                    src => $"{src.Enrollment.Student.FirstName} {src.Enrollment.Student.LastName}"))
+                    src => $"{src.Enrollment.Student.User.FirstName} {src.Enrollment.Student.User.LastName}"))
             .ForMember(
                 dest => dest.GroupId,
                 opt => opt.MapFrom(

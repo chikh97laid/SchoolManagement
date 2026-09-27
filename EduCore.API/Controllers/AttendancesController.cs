@@ -1,5 +1,6 @@
 ﻿using EduCore.Application.Features.Attendances.DTOs;
 using EduCore.Application.Features.Attendances.Interfaces;
+using EduCore.Application.Common.Pagination;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using EduCore.Shared.Constants;
@@ -37,10 +38,12 @@ public class AttendancesController : ControllerBase
 
     [HttpGet]
     [Authorize(Roles = $"{Roles.Admin},{Roles.Teacher}")]
-    public async Task<ActionResult<IEnumerable<AttendanceResponse>>> GetAll(
+    public async Task<ActionResult<PagedResult<AttendanceResponse>>> GetAll(
+        [FromQuery] PaginationParameters parameters,
         CancellationToken cancellationToken)
     {
         var result = await _attendanceService.GetAllAsync(
+            parameters,
             cancellationToken);
 
         return Ok(result);
@@ -98,5 +101,15 @@ public class AttendancesController : ControllerBase
             cancellationToken);
 
         return Ok(result);
+    }
+
+    [HttpPatch("{id:int}/soft-delete")]
+    [Authorize(Roles = Roles.Admin)]
+    public async Task<IActionResult> SoftDelete(
+        int id,
+        CancellationToken cancellationToken)
+    {
+        await _attendanceService.SoftDeleteAsync(id, cancellationToken);
+        return NoContent();
     }
 }

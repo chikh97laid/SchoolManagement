@@ -1,5 +1,6 @@
 ﻿using EduCore.Application.Features.StudentManagement.DTOs;
 using EduCore.Application.Features.StudentManagement.DTOs.Student;
+using EduCore.Application.Common.Pagination;
 
 namespace EduCore.Application.Features.StudentManagement.Interfaces;
 
@@ -13,7 +14,8 @@ public interface IStudentService
         int studentId,
         CancellationToken cancellationToken = default);
 
-    Task<IEnumerable<StudentResponse>> GetStudentsAsync(
+    Task<PagedResult<StudentResponse>> GetStudentsAsync(
+        PaginationParameters parameters,
         CancellationToken cancellationToken = default);
 
     Task<StudentResponse> UpdateStudentAsync(
@@ -22,6 +24,10 @@ public interface IStudentService
         CancellationToken cancellationToken = default);
 
     Task DeactivateStudentAccountAsync(
+        int studentId,
+        CancellationToken cancellationToken = default);
+
+    Task SoftDeleteStudentAsync(
         int studentId,
         CancellationToken cancellationToken = default);
 

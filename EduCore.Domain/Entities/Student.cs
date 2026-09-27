@@ -8,10 +8,6 @@ namespace EduCore.Domain.Entities
     {
         public string StudentCode { get; set; } = string.Empty;
 
-        public string FirstName { get; set; } = string.Empty;
-
-        public string LastName { get; set; } = string.Empty;
-
         public string? GuardianName { get; set; }
 
         public string? GuardianPhone { get; set; }
@@ -22,9 +18,9 @@ namespace EduCore.Domain.Entities
 
         public bool IsActive { get; set; } = true;
 
-        public Guid? UserId { get; set; }
+        public Guid UserId { get; set; }
 
-        public ApplicationUser? User { get; set; }
+        public ApplicationUser User { get; set; } = null!;
 
         public ICollection<Enrollment> Enrollments { get; set; } = [];
     }

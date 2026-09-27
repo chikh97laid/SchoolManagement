@@ -1,4 +1,5 @@
-﻿using EduCore.Application.Features.Teachers.DTOs;
+﻿using EduCore.Application.Common.Pagination;
+using EduCore.Application.Features.Teachers.DTOs;
 
 
 
@@ -14,7 +15,8 @@ public interface ITeacherService
         int id,
         CancellationToken cancellationToken = default);
 
-    Task<IEnumerable<TeacherResponse>> GetAllAsync(
+    Task<PagedResult<TeacherResponse>> GetAllAsync(
+        PaginationParameters parameters,
         CancellationToken cancellationToken = default);
 
     Task<TeacherResponse> UpdateAsync(
@@ -27,6 +29,10 @@ public interface ITeacherService
         CancellationToken cancellationToken = default);
 
     Task ActivateAsync(
+        int id,
+        CancellationToken cancellationToken = default);
+
+    Task SoftDeleteAsync(
         int id,
         CancellationToken cancellationToken = default);
 }

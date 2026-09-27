@@ -20,6 +20,7 @@ public static class ErrorCodes
         // for GroupService
         public const string NotFound = "GROUP_NOT_FOUND";
         public const string GroupNoTeacher = "GROUP_NO_TEACHER";
+        public const string NotActive = "GROUP_NOT_ACTIVE";
 
         // for fluent validation
         public const string NameRequired = "GROUP_NAME_REQUIRED";
@@ -49,6 +50,7 @@ public static class ErrorCodes
         public const string NotFound = "STUDENT_NOT_FOUND";
         public const string StudentAlreadyEnrolled = "STUDENT_ALREADY_ENROLLED";
         public const string AlreadyExists = "STUDENT_ALREADY_EXISTS";
+        public const string NotActive = "STUDENT_NOT_ACTIVE";
 
         // for fluent validation
         public const string FirstNameRequired = "STUDENT_FIRST_NAME_REQUIRED";
@@ -72,6 +74,7 @@ public static class ErrorCodes
     {
         // for TeacherService
         public const string NotFound = "TEACHER_NOT_FOUND";
+        public const string NotActive = "TEACHER_NOT_ACTIVE";
 
         // for fluent validation
         public const string FirstNameRequired = "TEACHER_FIRST_NAME_REQUIRED";
@@ -136,6 +139,7 @@ public static class ErrorCodes
         // for StudentFeeService
         public const string NotFound = "STUDENT_FEE_NOT_FOUND";
         public const string CannotChangeAmountWithPayments = "STUDENT_FEE_CANNOT_CHANGE_AMOUNT_WITH_PAYMENTS";
+        public const string CannotDeleteWithPayments = "CANNOT_DELETE_THE_STUDENT_FEE_BECAUSE_IT_HAS_ASSOCIATED_PAYMENTS";
 
         // for fluent validation
         public const string EnrollmentIdInvalid = "STUDENT_FEE_ENROLLMENT_ID_INVALID";

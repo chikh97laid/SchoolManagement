@@ -1,14 +1,15 @@
 ﻿using AutoMapper;
+using EduCore.Application.Common;
 using EduCore.Application.Common.Exceptions;
+using EduCore.Application.Common.Interfaces;
+using EduCore.Application.Common.Pagination;
 using EduCore.Application.Features.Teachers.DTOs;
 using EduCore.Application.Features.Teachers.Interfaces;
 using EduCore.Domain.Entities;
 using EduCore.Domain.Identity;
 using EduCore.Domain.Interfaces.Repositories;
-using Microsoft.AspNetCore.Identity;
-using EduCore.Application.Common;
 using EduCore.Shared.Constants;
-using EduCore.Application.Common.Interfaces;
+using Microsoft.AspNetCore.Identity;
 
 namespace EduCore.Application.Features.Teachers.Services;
 
@@ -116,7 +117,7 @@ public class TeacherService : ITeacherService
         {
             var adminTeacher = await _unitOfWork.Teachers
                 .FirstOrDefaultAsync(
-                    x => x.Id == id && !x.IsDeleted,
+                    x => x.Id == id,
                     false,
                     cancellationToken,
                     x => x.User);
@@ -127,18 +128,11 @@ public class TeacherService : ITeacherService
             return _mapper.Map<TeacherResponse>(adminTeacher);
         }
 
-        if (!_currentUserService.IsAuthenticated ||
-            _currentUserService.UserId == Guid.Empty)
-        {
-            throw new NotFoundException(ErrorCodes.Teacher.NotFound);
-        }
-
         if (_currentUserService.IsStudent)
         {
             var student = await _unitOfWork.Students
                 .FirstOrDefaultAsync(
-                    x => x.UserId == _currentUserService.UserId
-                        && !x.IsDeleted,
+                    x => x.UserId == _currentUserService.UserId,
                     false,
                     cancellationToken);
 
@@ -147,8 +141,7 @@ public class TeacherService : ITeacherService
 
             var teacher = await _unitOfWork.Teachers
                 .FirstOrDefaultAsync(
-                    x => x.Id == id
-                        && !x.IsDeleted,
+                    x => x.Id == id,
                     false,
                     cancellationToken,
                     x => x.User);
@@ -159,9 +152,7 @@ public class TeacherService : ITeacherService
             var isStudentLinkedToTeacher =
                 await _unitOfWork.Enrollments.ExistsAsync(
                     x => x.StudentId == student.Id
-                        && x.Group.TeacherId == teacher.Id
-                        && !x.IsDeleted
-                        && !x.Group.IsDeleted,
+                        && x.Group.TeacherId == teacher.Id,
                     cancellationToken);
 
             if (!isStudentLinkedToTeacher)
@@ -175,7 +166,6 @@ public class TeacherService : ITeacherService
             var teacher = await _unitOfWork.Teachers
                 .FirstOrDefaultAsync(
                     x => x.Id == id
-                        && !x.IsDeleted
                         && x.UserId == _currentUserService.UserId,
                     false,
                     cancellationToken,
@@ -190,18 +180,31 @@ public class TeacherService : ITeacherService
         throw new NotFoundException(ErrorCodes.Teacher.NotFound);
     }
 
-    public async Task<IEnumerable<TeacherResponse>> GetAllAsync(
+    public async Task<PagedResult<TeacherResponse>> GetAllAsync(
+        PaginationParameters parameters,
         CancellationToken cancellationToken = default)
     {
-        var teachers = await _unitOfWork.Teachers
-            .FindAsync(
-                x => !x.IsDeleted,
+        var (teachers, totalCount) =
+            await _unitOfWork.Teachers.GetPagedAsync(
+                x => true,
+                x => x.Id,
+                parameters.PageNumber,
+                parameters.PageSize,
                 false,
                 cancellationToken,
                 x => x.User);
 
-        return _mapper.Map<IEnumerable<TeacherResponse>>(teachers);
+        var items = _mapper.Map<List<TeacherResponse>>(teachers);
+
+        return new PagedResult<TeacherResponse>
+        {
+            Items = items,
+            PageNumber = parameters.PageNumber,
+            PageSize = parameters.PageSize,
+            TotalCount = totalCount
+        };
     }
+
 
     public async Task<TeacherResponse> UpdateAsync(
         int id,
@@ -210,7 +213,7 @@ public class TeacherService : ITeacherService
     {
         var teacher = await _unitOfWork.Teachers
             .FirstOrDefaultAsync(
-                x => x.Id == id && !x.IsDeleted,
+                x => x.Id == id,
                 true,
                 cancellationToken,
                 x => x.User);
@@ -253,7 +256,7 @@ public class TeacherService : ITeacherService
     {
         var teacher = await _unitOfWork.Teachers
             .FirstOrDefaultAsync(
-                x => x.Id == id && !x.IsDeleted,
+                x => x.Id == id,
                 true,
                 cancellationToken,
                 x => x.User);
@@ -291,5 +294,32 @@ public class TeacherService : ITeacherService
 
         await _unitOfWork.SaveChangesAsync(
             cancellationToken);
+    }
+
+    public async Task SoftDeleteAsync(
+        int id,
+        CancellationToken cancellationToken = default)
+    {
+        var teacher = await _unitOfWork.Teachers
+            .FirstOrDefaultAsync(
+                x => x.Id == id,
+                trackChanges: true,
+                cancellationToken: cancellationToken,
+                x => x.User);
+
+        if (teacher is null)
+            throw new NotFoundException(ErrorCodes.Teacher.NotFound);
+
+        teacher.IsActive = false;
+        teacher.IsDeleted = true;
+        teacher.DeletedAt = DateTime.UtcNow;
+        teacher.DeletedBy = _currentUserService.IsAuthenticated
+            ? _currentUserService.UserId
+            : null;
+
+        if (teacher.User is not null)
+            teacher.User.IsActive = false;
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 }

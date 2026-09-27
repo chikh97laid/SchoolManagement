@@ -16,6 +16,6 @@ public class GroupProfile : Profile
             .ForMember(
                 dest => dest.TeacherName,
                 opt => opt.MapFrom(
-                    src => src.Teacher.FirstName + " " + src.Teacher.LastName));
+                    src => src.Teacher.User.FirstName + " " + src.Teacher.User.LastName));
     }
 }

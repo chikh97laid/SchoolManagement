@@ -1,4 +1,5 @@
 ﻿using EduCore.Application.Features.Groups.DTOs;
+using EduCore.Application.Common.Pagination;
 
 namespace EduCore.Application.Features.Groups.Interfaces;
 
@@ -12,7 +13,8 @@ public interface IGroupService
         int id,
         CancellationToken cancellationToken = default);
 
-    Task<IEnumerable<GroupResponse>> GetAllAsync(
+    Task<PagedResult<GroupResponse>> GetAllAsync(
+        PaginationParameters parameters,
         CancellationToken cancellationToken = default);
 
     Task<GroupResponse> UpdateAsync(
@@ -25,6 +27,10 @@ public interface IGroupService
         CancellationToken cancellationToken = default);
 
     Task ActivateAsync(
+        int id,
+        CancellationToken cancellationToken = default);
+
+    Task SoftDeleteAsync(
         int id,
         CancellationToken cancellationToken = default);
 }

@@ -1,5 +1,6 @@
 ﻿using EduCore.Application.Features.Groups.DTOs;
 using EduCore.Application.Features.Groups.Interfaces;
+using EduCore.Application.Common.Pagination;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using EduCore.Shared.Constants;
@@ -50,10 +51,12 @@ namespace EduCore.API.Controllers
 
         [HttpGet]
         [Authorize(Roles = $"{Roles.Admin},{Roles.Teacher}")]
-        public async Task<ActionResult<IEnumerable<GroupResponse>>> GetAll(
+        public async Task<ActionResult<PagedResult<GroupResponse>>> GetAll(
+            [FromQuery] PaginationParameters parameters,
             CancellationToken cancellationToken)
         {
             var result = await _groupService.GetAllAsync(
+                parameters,
                 cancellationToken);
 
             return Ok(result);
@@ -97,6 +100,16 @@ namespace EduCore.API.Controllers
                 id,
                 cancellationToken);
 
+            return NoContent();
+        }
+
+        [HttpPatch("{id:int}/soft-delete")]
+        [Authorize(Roles = Roles.Admin)]
+        public async Task<IActionResult> SoftDelete(
+            int id,
+            CancellationToken cancellationToken)
+        {
+            await _groupService.SoftDeleteAsync(id, cancellationToken);
             return NoContent();
         }
 

@@ -3,6 +3,7 @@ using ClosedXML.Excel;
 using EduCore.Application.Common;
 using EduCore.Application.Common.Exceptions;
 using EduCore.Application.Common.Interfaces;
+using EduCore.Application.Common.Pagination;
 using EduCore.Application.Features.StudentManagement.DTOs;
 using EduCore.Application.Features.StudentManagement.DTOs.Student;
 using EduCore.Application.Features.StudentManagement.Interfaces;
@@ -80,8 +81,6 @@ public class StudentService : IStudentService
             var student = new Student
             {
                 StudentCode = studentCode, 
-                FirstName = request.FirstName.Trim(),
-                LastName = request.LastName.Trim(),
                 GuardianName = request.GuardianName?.Trim(),
                 GuardianPhone = request.GuardianPhone?.Trim(),
                 BirthDate = request.BirthDate,
@@ -119,7 +118,7 @@ public class StudentService : IStudentService
         if (_currentUserService.IsAdmin)
         {
             var adminStudent = await _unitOfWork.Students.FirstOrDefaultAsync(
-                x => x.Id == studentId && !x.IsDeleted,
+                x => x.Id == studentId,
                 false,
                 cancellationToken,
                 x => x.User);
@@ -130,13 +129,11 @@ public class StudentService : IStudentService
             return _mapper.Map<StudentResponse>(adminStudent);
         }
 
-        if (!_currentUserService.IsAuthenticated || _currentUserService.UserId == Guid.Empty)
-            throw new NotFoundException(ErrorCodes.Student.NotFound);
 
         if (_currentUserService.IsStudent)
         {
             var currentStudent = await _unitOfWork.Students.FirstOrDefaultAsync(
-                x => x.UserId == _currentUserService.UserId && !x.IsDeleted,
+                x => x.UserId == _currentUserService.UserId,
                 false,
                 cancellationToken,
                 x => x.User);
@@ -150,7 +147,7 @@ public class StudentService : IStudentService
         if (_currentUserService.IsTeacher)
         {
             var teacher = await _unitOfWork.Teachers.FirstOrDefaultAsync(
-                x => x.UserId == _currentUserService.UserId && !x.IsDeleted,
+                x => x.UserId == _currentUserService.UserId,
                 false,
                 cancellationToken);
 
@@ -158,7 +155,7 @@ public class StudentService : IStudentService
                 throw new NotFoundException(ErrorCodes.Student.NotFound);
 
             var student = await _unitOfWork.Students.FirstOrDefaultAsync(
-                x => x.Id == studentId && !x.IsDeleted,
+                x => x.Id == studentId,
                 false,
                 cancellationToken,
                 x => x.User);
@@ -168,9 +165,7 @@ public class StudentService : IStudentService
 
             var isStudentInTeacherScope = await _unitOfWork.Enrollments.ExistsAsync(
                 x => x.StudentId == student.Id
-                    && x.Group.TeacherId == teacher.Id
-                    && !x.IsDeleted
-                    && !x.Group.IsDeleted,
+                    && x.Group.TeacherId == teacher.Id,
                 cancellationToken);
 
             if (!isStudentInTeacherScope)
@@ -182,38 +177,60 @@ public class StudentService : IStudentService
         throw new NotFoundException(ErrorCodes.Student.NotFound);
     }
 
-    public async Task<IEnumerable<StudentResponse>> GetStudentsAsync(
-    CancellationToken cancellationToken = default)
+    public async Task<PagedResult<StudentResponse>> GetStudentsAsync(
+        PaginationParameters parameters,
+        CancellationToken cancellationToken = default)
     {
         if (_currentUserService.IsAdmin)
         {
-            var students = await _unitOfWork.Students.FindAsync(
-                x => !x.IsDeleted,
+            var (students, totalCount) = await _unitOfWork.Students.GetPagedAsync(
+                x => true,
+                x => x.Id,
+                parameters.PageNumber,
+                parameters.PageSize,
                 false,
                 cancellationToken,
                 x => x.User);
 
-            return _mapper.Map<IEnumerable<StudentResponse>>(students.OrderBy(s => s.Id));
+            return new PagedResult<StudentResponse>
+            {
+                Items = _mapper.Map<List<StudentResponse>>(students),
+                PageNumber = parameters.PageNumber,
+                PageSize = parameters.PageSize,
+                TotalCount = totalCount
+            };
         }
 
         if (_currentUserService.IsTeacher)
         {
             var teacher = await _unitOfWork.Teachers.FirstOrDefaultAsync(
-                x => x.UserId == _currentUserService.UserId && !x.IsDeleted,
+                x => x.UserId == _currentUserService.UserId,
                 false,
                 cancellationToken);
 
             if (teacher is null)
-                return [];
+                return new PagedResult<StudentResponse>
+                {
+                    PageNumber = parameters.PageNumber,
+                    PageSize = parameters.PageSize
+                };
 
-            var students = await _unitOfWork.Students.FindAsync(
-                x => !x.IsDeleted
-                    && x.Enrollments.Any(e => e.Group.TeacherId == teacher.Id && !e.IsDeleted && !e.Group.IsDeleted),
+            var (students, totalCount) = await _unitOfWork.Students.GetPagedAsync(
+                x => x.Enrollments.Any(e => e.Group.TeacherId == teacher.Id),
+                x => x.Id,
+                parameters.PageNumber,
+                parameters.PageSize,
                 false,
                 cancellationToken,
                 x => x.User);
 
-            return _mapper.Map<IEnumerable<StudentResponse>>(students.OrderBy(s => s.Id));
+            return new PagedResult<StudentResponse>
+            {
+                Items = _mapper.Map<List<StudentResponse>>(students),
+                PageNumber = parameters.PageNumber,
+                PageSize = parameters.PageSize,
+                TotalCount = totalCount
+            };
         }
 
         if (_currentUserService.IsStudent)
@@ -229,7 +246,7 @@ public class StudentService : IStudentService
     CancellationToken cancellationToken = default)
     {
         var student = await _unitOfWork.Students.FirstOrDefaultAsync(
-            x => x.Id == studentId && !x.IsDeleted,
+            x => x.Id == studentId,
             true,
             cancellationToken,
             x => x.User);
@@ -255,7 +272,7 @@ public class StudentService : IStudentService
     CancellationToken cancellationToken = default)
     {
         var student = await _unitOfWork.Students.FirstOrDefaultAsync(
-            x => x.Id == studentId && !x.IsDeleted,
+            x => x.Id == studentId,
             true,
             cancellationToken,
             x => x.User);
@@ -269,6 +286,32 @@ public class StudentService : IStudentService
         {
             student.User.IsActive = false;
         }
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task SoftDeleteStudentAsync(
+        int studentId,
+        CancellationToken cancellationToken = default)
+    {
+        var student = await _unitOfWork.Students.FirstOrDefaultAsync(
+            x => x.Id == studentId,
+            trackChanges: true,
+            cancellationToken: cancellationToken,
+            x => x.User);
+
+        if (student is null)
+            throw new NotFoundException(ErrorCodes.Student.NotFound);
+
+        student.IsActive = false;
+        student.IsDeleted = true;
+        student.DeletedAt = DateTime.UtcNow;
+        student.DeletedBy = _currentUserService.IsAuthenticated
+            ? _currentUserService.UserId
+            : null;
+
+        if (student.User is not null)
+            student.User.IsActive = false;
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
@@ -435,24 +478,6 @@ public class StudentService : IStudentService
             throw new InvalidOperationException(ErrorCodes.StudentImport.DefaultPasswordNotConfigured);
 
         // ==========================================
-        // 1. Check if the student already exists
-        // ==========================================
-
-        var studentExists =
-            await _unitOfWork.Students.ExistsAsync(
-                x =>
-                    x.FirstName == row.FirstName &&
-                    x.LastName == row.LastName &&
-                    x.GuardianPhone == row.GuardianPhone &&
-                    !x.IsDeleted,
-                cancellationToken);
-
-        if (studentExists)
-        {
-            throw new BadRequestException(ErrorCodes.StudentImport.AlreadyExists);
-        }
-
-        // ==========================================
         // 5. Create Identity User
         // ==========================================
 
@@ -498,8 +523,6 @@ public class StudentService : IStudentService
         var student = new Student
         {
             StudentCode = studentCode,
-            FirstName = row.FirstName,
-            LastName = row.LastName,
             GuardianName = row.GuardianName,
             GuardianPhone = row.GuardianPhone,
             BirthDate = row.BirthDate,

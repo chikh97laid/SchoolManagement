@@ -14,7 +14,7 @@ public class EnrollmentProfile : Profile
             .ForMember(
                 dest => dest.StudentName,
                 opt => opt.MapFrom(
-                    src => $"{src.Student.FirstName} {src.Student.LastName}"))
+                    src => $"{src.Student.User.FirstName} {src.Student.User.LastName}"))
 
             .ForMember(
                 dest => dest.GroupName,
@@ -29,6 +29,6 @@ public class EnrollmentProfile : Profile
             .ForMember(
                 dest => dest.TeacherName,
                 opt => opt.MapFrom(
-                    src => $"{src.Group.Teacher.FirstName} {src.Group.Teacher.LastName}"));
+                    src => $"{src.Group.Teacher.User.FirstName} {src.Group.Teacher.User.LastName}"));
     }
 }

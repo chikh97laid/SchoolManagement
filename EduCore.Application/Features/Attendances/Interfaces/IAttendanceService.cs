@@ -1,4 +1,5 @@
 ﻿using EduCore.Application.Features.Attendances.DTOs;
+using EduCore.Application.Common.Pagination;
 
 namespace EduCore.Application.Features.Attendances.Interfaces;
 public interface IAttendanceService
@@ -11,7 +12,9 @@ public interface IAttendanceService
         int id,
         CancellationToken cancellationToken = default);
 
-    Task<IEnumerable<AttendanceResponse>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<PagedResult<AttendanceResponse>> GetAllAsync(
+        PaginationParameters parameters,
+        CancellationToken cancellationToken = default);
 
     Task<IEnumerable<AttendanceResponse>> GetByEnrollmentAsync(
         int enrollmentId,
@@ -24,5 +27,9 @@ public interface IAttendanceService
     Task<AttendanceResponse> UpdateAsync(
         int id,
         UpdateAttendanceRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task SoftDeleteAsync(
+        int id,
         CancellationToken cancellationToken = default);
 }

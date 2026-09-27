@@ -13,14 +13,6 @@ namespace EduCore.Persistence.Configurations
 
             builder.ConfigureBaseEntity();
 
-            builder.Property(x => x.FirstName)
-                .IsRequired()
-                .HasMaxLength(50);
-
-            builder.Property(x => x.LastName)
-                .IsRequired()
-                .HasMaxLength(50);
-
             builder.Property(x => x.Specialization)
                 .HasMaxLength(100);
 
