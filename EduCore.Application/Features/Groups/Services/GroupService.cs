@@ -48,18 +48,15 @@ public class GroupService : IGroupService
         CreateGroupRequest request,
         CancellationToken cancellationToken = default)
     {
-        var teacher = await _unitOfWork.Teachers
-            .FirstOrDefaultAsync(
+        var teacherExists = await _unitOfWork.Teachers
+            .ExistsAsync(
                 x => x.Id == request.TeacherId && x.IsActive,
-                trackChanges: true,
-                cancellationToken: cancellationToken,
-                x => x.User);
+                cancellationToken);
 
-        if (teacher is null)
+        if (!teacherExists)
             throw new BadRequestException(ErrorCodes.Group.GroupNoTeacher);
 
         var group = _mapper.Map<Group>(request);
-        group.Teacher = teacher;
 
         group.IsActive = true;
 
@@ -70,7 +67,18 @@ public class GroupService : IGroupService
         await _unitOfWork.SaveChangesAsync(
             cancellationToken);
 
-        return _mapper.Map<GroupResponse>(group);
+        var createdGroup = await _unitOfWork.Groups
+            .FirstOrDefaultAsync(
+                x => x.Id == group.Id,
+                trackChanges: false,
+                cancellationToken: cancellationToken,
+                x => x.Teacher,
+                x => x.Teacher.User);
+
+        if (createdGroup is null)
+            throw new NotFoundException(ErrorCodes.Group.NotFound);
+
+        return _mapper.Map<GroupResponse>(createdGroup);
     }
 
     public async Task<GroupResponse> GetByIdAsync(
