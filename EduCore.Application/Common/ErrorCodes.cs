@@ -176,6 +176,10 @@ public static class ErrorCodes
         public const string EmptyFile = "STUDENT_IMPORT_EMPTY_FILE";
         public const string NoDataRows = "STUDENT_IMPORT_NO_DATA_ROWS";
         public const string DefaultPasswordNotConfigured = "STUDENT_IMPORT_DEFAULT_PASSWORD_NOT_CONFIGURED";
+        public const string FileTooLarge = "STUDENT_IMPORT_FILE_TOO_LARGE";
+        public const string TooManyRows = "STUDENT_IMPORT_TOO_MANY_ROWS";
+        public const string InvalidExcelFile = "STUDENT_IMPORT_INVALID_EXCEL_FILE";
+        public const string InvalidHeaders = "STUDENT_IMPORT_INVALID_HEADERS";
 
         // Row-level errors inside Excel (added to ReadErrors list)
         public const string NameRequired = "STUDENT_IMPORT_NAME_REQUIRED";

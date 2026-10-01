@@ -12,6 +12,7 @@ using EduCore.Domain.Entities.Enums;
 using EduCore.Domain.Identity;
 using EduCore.Domain.Interfaces.Repositories;
 using EduCore.Shared.Constants;
+using FluentValidation;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using System.Globalization;
@@ -26,19 +27,22 @@ public class StudentService : IStudentService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IMapper _mapper;
     private readonly ICurrentUserService _currentUserService;
+    private readonly IValidator<ImportStudentsRequest> _importStudentsValidator;
 
     public StudentService(
         UserManager<ApplicationUser> userManager,
         IUnitOfWork unitOfWork,
         IMapper mapper,
         IOptions<StudentImportSettings> settings,
-        ICurrentUserService currentUserService)
+        ICurrentUserService currentUserService,
+        IValidator<ImportStudentsRequest> importStudentsValidator)
     {
         _userManager = userManager;
         _unitOfWork = unitOfWork;
         _mapper = mapper;
         _settings = settings.Value;
         _currentUserService = currentUserService;
+        _importStudentsValidator = importStudentsValidator;
     }
 
     public async Task<CreateStudentResponse> CreateStudentAsync(
@@ -318,37 +322,106 @@ public class StudentService : IStudentService
 
 
     public async Task<ImportStudentsResponse> ImportStudentsFromExcelAsync(
-     Stream fileStream,
-     CancellationToken cancellationToken = default)
+        Stream fileStream,
+        CancellationToken cancellationToken = default)
     {
-        if (fileStream is null || fileStream.Length == 0)
+        if (fileStream is null || !fileStream.CanRead)
             throw new BadRequestException(ErrorCodes.StudentImport.EmptyFile);
 
-      
-        var (validRows, readErrors, totalDataRows) = ReadExcelRows(fileStream);
+        MemoryStream? bufferedStream = null;
+        var workbookStream = fileStream;
+        if (fileStream.CanSeek)
+        {
+            var remainingLength = fileStream.Length - fileStream.Position;
+            if (remainingLength > StudentImportSettings.MaxFileSizeBytes)
+                throw new BadRequestException(ErrorCodes.StudentImport.FileTooLarge);
+
+            if (remainingLength <= 0)
+                throw new BadRequestException(ErrorCodes.StudentImport.EmptyFile);
+        }
+        else
+        {
+            bufferedStream = await BufferWithinLimitAsync(
+                fileStream,
+                cancellationToken);
+            workbookStream = bufferedStream;
+        }
+
+        List<ImportStudentsRequest> parsedRows;
+        List<StudentImportError> rowErrors;
+        int totalDataRows;
+        try
+        {
+            (parsedRows, rowErrors, totalDataRows) = ReadExcelRows(workbookStream);
+        }
+        catch (BadRequestException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (
+            exception is not OutOfMemoryException &&
+            exception is not OperationCanceledException)
+        {
+            throw new BadRequestException(ErrorCodes.StudentImport.InvalidExcelFile);
+        }
+        finally
+        {
+            bufferedStream?.Dispose();
+        }
 
         if (totalDataRows == 0)
             throw new BadRequestException(ErrorCodes.StudentImport.NoDataRows);
 
-        
+        var validRows = new List<ImportStudentsRequest>();
+        foreach (var row in parsedRows)
+        {
+            var validation = await _importStudentsValidator.ValidateAsync(
+                row,
+                cancellationToken);
+
+            if (validation.IsValid)
+            {
+                validRows.Add(row);
+                continue;
+            }
+
+            rowErrors.AddRange(validation.Errors.Select(error => new StudentImportError
+            {
+                RowNumber = row.RowNumber,
+                Error = string.IsNullOrWhiteSpace(error.ErrorCode)
+                    ? error.ErrorMessage
+                    : error.ErrorCode
+            }));
+        }
+
+        var uniqueRows = await RemoveDuplicateImportRowsAsync(
+            validRows,
+            rowErrors,
+            cancellationToken);
+
         var response = new ImportStudentsResponse
         {
             TotalRows = totalDataRows,
-            FailedRows = readErrors.Count,
-            SuccessfulRows = validRows.Count,
-            Errors = readErrors
+            FailedRows = rowErrors.Select(error => error.RowNumber).Distinct().Count(),
+            SuccessfulRows = uniqueRows.Count,
+            Errors = rowErrors
         };
+
+        if (uniqueRows.Count == 0)
+            return response;
+
+        if (string.IsNullOrWhiteSpace(_settings.DefaultPassword))
+            throw new InvalidOperationException(ErrorCodes.StudentImport.DefaultPasswordNotConfigured);
 
         await _unitOfWork.BeginTransactionAsync(cancellationToken);
 
         try
         {
-            
-            foreach (var row in validRows)
+            foreach (var row in uniqueRows)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                await ImportStudentRowAsync(row, _settings.DefaultPassword, cancellationToken);
+                await ImportStudentRowAsync(row, cancellationToken);
             }
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -358,9 +431,152 @@ public class StudentService : IStudentService
         }
         catch
         {
-            await _unitOfWork.RollbackTransactionAsync(cancellationToken);
+            await _unitOfWork.RollbackTransactionAsync(CancellationToken.None);
             throw;
         }
+    }
+
+    private static async Task<MemoryStream> BufferWithinLimitAsync(
+        Stream input,
+        CancellationToken cancellationToken)
+    {
+        var output = new MemoryStream();
+        var buffer = new byte[81920];
+
+        try
+        {
+            int bytesRead;
+            while ((bytesRead = await input.ReadAsync(buffer.AsMemory(), cancellationToken)) > 0)
+            {
+                if (output.Length + bytesRead > StudentImportSettings.MaxFileSizeBytes)
+                    throw new BadRequestException(ErrorCodes.StudentImport.FileTooLarge);
+
+                await output.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken);
+            }
+
+            if (output.Length == 0)
+                throw new BadRequestException(ErrorCodes.StudentImport.EmptyFile);
+
+            output.Position = 0;
+            return output;
+        }
+        catch
+        {
+            await output.DisposeAsync();
+            throw;
+        }
+    }
+
+    private async Task<List<ImportStudentsRequest>> RemoveDuplicateImportRowsAsync(
+        IReadOnlyCollection<ImportStudentsRequest> rows,
+        List<StudentImportError> errors,
+        CancellationToken cancellationToken)
+    {
+        var candidatePhones = rows
+            .Select(row => NormalizePhone(row.GuardianPhone))
+            .Where(phone => phone is not null)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var candidateBirthDates = rows
+            .Where(row => row.BirthDate.HasValue)
+            .Select(row => row.BirthDate!.Value)
+            .Distinct()
+            .ToArray();
+
+        IEnumerable<Student> existingStudents = [];
+        if (candidatePhones.Length > 0 || candidateBirthDates.Length > 0)
+        {
+            existingStudents = await _unitOfWork.Students.FindAsync(
+                student =>
+                    (student.GuardianPhone != null && candidatePhones.Contains(student.GuardianPhone)) ||
+                    (student.BirthDate.HasValue && candidateBirthDates.Contains(student.BirthDate.Value)),
+                trackChanges: false,
+                cancellationToken: cancellationToken,
+                student => student.User);
+        }
+
+        var existingKeys = new HashSet<StudentImportDuplicateKey>();
+        foreach (var student in existingStudents)
+        {
+            if (student.User is null)
+                continue;
+
+            var key = CreateDuplicateKey(
+                student.User.FirstName,
+                student.User.LastName,
+                student.GuardianPhone,
+                student.BirthDate,
+                student.Gender);
+
+            if (key.HasDiscriminator)
+                existingKeys.Add(key);
+        }
+
+        var acceptedRows = new List<ImportStudentsRequest>(rows.Count);
+        foreach (var row in rows)
+        {
+            var key = CreateDuplicateKey(
+                row.FirstName,
+                row.LastName,
+                row.GuardianPhone,
+                row.BirthDate,
+                row.Gender);
+
+            if (key.HasDiscriminator && !existingKeys.Add(key))
+            {
+                errors.Add(new StudentImportError
+                {
+                    RowNumber = row.RowNumber,
+                    Error = ErrorCodes.StudentImport.AlreadyExists
+                });
+                continue;
+            }
+
+            acceptedRows.Add(row);
+        }
+
+        return acceptedRows;
+    }
+
+    private static StudentImportDuplicateKey CreateDuplicateKey(
+        string firstName,
+        string lastName,
+        string? guardianPhone,
+        DateOnly? birthDate,
+        Gender gender)
+    {
+        return new StudentImportDuplicateKey(
+            NormalizeName(firstName),
+            NormalizeName(lastName),
+            NormalizePhone(guardianPhone),
+            birthDate,
+            gender);
+    }
+
+    private static string NormalizeName(string value)
+    {
+        return string.Join(' ', value.Trim().Split(
+            (char[]?)null,
+            StringSplitOptions.RemoveEmptyEntries)).ToUpperInvariant();
+    }
+
+    private static string? NormalizePhone(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var digits = new string(value.Where(char.IsDigit).ToArray());
+        return digits.Length == 0 ? null : digits;
+    }
+
+    private readonly record struct StudentImportDuplicateKey(
+        string FirstName,
+        string LastName,
+        string? GuardianPhone,
+        DateOnly? BirthDate,
+        Gender Gender)
+    {
+        public bool HasDiscriminator => GuardianPhone is not null || BirthDate.HasValue;
     }
 
     private static (List<ImportStudentsRequest> ValidRows, List<StudentImportError> ReadErrors, int TotalDataRows) ReadExcelRows(Stream fileStream)
@@ -368,7 +584,19 @@ public class StudentService : IStudentService
         var validRows = new List<ImportStudentsRequest>();
         var readErrors = new List<StudentImportError>();
 
-        using var workbook = new XLWorkbook(fileStream);
+        XLWorkbook workbook;
+        try
+        {
+            workbook = new XLWorkbook(fileStream);
+        }
+        catch (Exception exception) when (
+            exception is not OutOfMemoryException &&
+            exception is not OperationCanceledException)
+        {
+            throw new BadRequestException(ErrorCodes.StudentImport.InvalidExcelFile);
+        }
+
+        using var workbookToDispose = workbook;
         var worksheet = workbook.Worksheets.FirstOrDefault();
 
         if (worksheet is null)
@@ -379,34 +607,29 @@ public class StudentService : IStudentService
             return (validRows, readErrors, 0);
 
         int totalDataRows = usedRows.Count - 1;
+        if (totalDataRows > StudentImportSettings.MaxRows)
+            throw new BadRequestException(ErrorCodes.StudentImport.TooManyRows);
 
-        
         string[] allowedDateFormats = {
             "yyyy-MM-dd", "yyyy/MM/dd",
             "MM/dd/yyyy", "M/d/yyyy",
             "dd/MM/yyyy", "d/M/yyyy"
         };
 
+        var headerRow = usedRows[0];
+
+        ValidateHeaders(headerRow);
+
         for (int i = 1; i < usedRows.Count; i++)
         {
-            int rowNumber = i + 1;
             var row = usedRows[i];
+            var rowNumber = row.RowNumber();
 
             var firstName = row.Cell(2).GetString().Trim();
             var lastName = row.Cell(3).GetString().Trim();
             var guardianName = row.Cell(4).GetString().Trim();
             var guardianPhone = row.Cell(5).GetString().Trim();
             var genderText = row.Cell(7).GetString().Trim();
-
-            if (string.IsNullOrWhiteSpace(firstName) || string.IsNullOrWhiteSpace(lastName))
-            {
-                readErrors.Add(new StudentImportError
-                {
-                    RowNumber = rowNumber,
-                    Error = ErrorCodes.StudentImport.NameRequired
-                });
-                continue;
-            }
 
             // check validate date
             DateOnly? birthDate = null;
@@ -444,15 +667,10 @@ public class StudentService : IStudentService
             }
 
             // check gender
-            if (!Enum.TryParse<Gender>(genderText, true, out var gender))
-            {
-                readErrors.Add(new StudentImportError
-                {
-                    RowNumber = rowNumber,
-                    Error = ErrorCodes.StudentImport.InvalidGender
-                });
-                continue;
-            }
+            var gender = Enum.TryParse<Gender>(genderText, true, out var parsedGender) &&
+                         Enum.IsDefined(parsedGender)
+                ? parsedGender
+                : (Gender)(-1);
 
             validRows.Add(new ImportStudentsRequest
             {
@@ -470,13 +688,9 @@ public class StudentService : IStudentService
     }
 
     private async Task ImportStudentRowAsync(
-    ImportStudentsRequest row,
-    string defaultPassword,
-    CancellationToken cancellationToken)
+        ImportStudentsRequest row,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(defaultPassword))
-            throw new InvalidOperationException(ErrorCodes.StudentImport.DefaultPasswordNotConfigured);
-
         // ==========================================
         // 5. Create Identity User
         // ==========================================
@@ -498,7 +712,7 @@ public class StudentService : IStudentService
         var userResult =
             await _userManager.CreateAsync(
                 user,
-                defaultPassword);
+                _settings.DefaultPassword);
 
         if (!userResult.Succeeded)
         {
@@ -536,5 +750,37 @@ public class StudentService : IStudentService
             cancellationToken);
 
     }
+
+    private static void ValidateHeaders(IXLRow headerRow)
+    {
+        var expectedHeaders = new[]
+        {
+            "ID",
+            "FirstName",
+            "LastName",
+            "GuardianName",
+            "GuardianPhone",
+            "BirthDate",
+            "Gender"
+        };
+
+        for (int i = 0; i < expectedHeaders.Length; i++)
+        {
+            var actualHeader = headerRow
+                .Cell(i + 1)
+                .GetString()
+                .Trim();
+
+            if (!string.Equals(
+                    actualHeader,
+                    expectedHeaders[i],
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new BadRequestException(
+                    ErrorCodes.StudentImport.InvalidHeaders);
+            }
+        }
+    }
+
 
 }

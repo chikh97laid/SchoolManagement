@@ -114,12 +114,17 @@ public class StudentsController : ControllerBase
     [Authorize(Roles = Roles.Admin)]
     [HttpPost("import")]
     [Consumes("multipart/form-data")]
+    [RequestSizeLimit(StudentImportSettings.MaxRequestSizeBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = StudentImportSettings.MaxRequestSizeBytes)]
     public async Task<ActionResult<ImportStudentsResponse>> ImportStudents(
     IFormFile file,
     CancellationToken cancellationToken)
     {
         if (file is null || file.Length == 0)
             return BadRequest("Excel file is required.");
+
+        if (file.Length > StudentImportSettings.MaxFileSizeBytes)
+            return StatusCode(StatusCodes.Status413PayloadTooLarge);
 
         if (!Path.GetExtension(file.FileName)
             .Equals(".xlsx", StringComparison.OrdinalIgnoreCase))
