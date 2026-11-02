@@ -102,6 +102,7 @@ public static class ErrorCodes
         public const string InvalidCredentials = "INVALID_CREDENTIALS";
         public const string MustBeLoggedIn = "MUST_BE_LOGGED_IN";
         public const string Forbidden = "FORBIDDEN";
+        public const string MustChangePassword = "MUST_CHANGE_PASSWORD";
         public const string Unauthorized = "UNAUTHORIZED";
         public const string InvalidUserNamePassword = "INVALID_USERNAME_OR_PASSWORD";
 

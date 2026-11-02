@@ -64,7 +64,8 @@ public class StudentService : IStudentService
                 Email = request.Email?.Trim(),
                 FirstName = request.FirstName.Trim(),
                 LastName = request.LastName.Trim(),
-                IsActive = true
+                IsActive = true,
+                MustChangePassword = true
             };
 
             var userResult = await _userManager.CreateAsync(user, request.Password);
@@ -706,7 +707,8 @@ public class StudentService : IStudentService
 
             LastName = row.LastName,
 
-            IsActive = true
+            IsActive = true,
+            MustChangePassword = true
         };
 
         var userResult =

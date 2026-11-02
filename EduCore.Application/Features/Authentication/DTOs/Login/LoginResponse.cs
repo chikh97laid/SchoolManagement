@@ -16,4 +16,6 @@ public class LoginResponse
     public DateTime Expiration { get; set; }
 
     public List<string> Roles { get; set; } = [];
+
+    public bool MustChangePassword { get; set; }
 }

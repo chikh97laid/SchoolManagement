@@ -19,6 +19,9 @@ namespace EduCore.Persistence.Configurations
             builder.Property(x => x.IsActive)
                 .HasDefaultValue(true);
 
+            builder.Property(x => x.MustChangePassword)
+                .HasDefaultValue(false);
+
             builder.Property(x => x.CreatedAt);
         }
     }

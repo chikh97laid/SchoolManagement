@@ -57,6 +57,7 @@ public class ExceptionMiddleware
 
                 response.StatusCode = context.Response.StatusCode;
                 response.Message = exception.Message;
+                response.Errors = [exception.Message];
 
                 _logger.LogWarning("Bad request for request {Path}: {Message}", context.Request.Path, exception.Message);
                 break;
@@ -67,6 +68,7 @@ public class ExceptionMiddleware
 
                 response.StatusCode = context.Response.StatusCode;
                 response.Message = exception.Message;
+                response.Errors = [exception.Message];
 
                 _logger.LogWarning("Unauthorized access for request {Path}: {Message}", context.Request.Path, exception.Message);
                 break;
@@ -77,6 +79,7 @@ public class ExceptionMiddleware
 
                 response.StatusCode = context.Response.StatusCode;
                 response.Message = exception.Message;
+                response.Errors = [exception.Message];
                 
                 _logger.LogWarning("Forbidden access for request {Path}: {Message}", context.Request.Path, exception.Message);
                 break;
@@ -87,6 +90,7 @@ public class ExceptionMiddleware
 
                 response.StatusCode = context.Response.StatusCode;
                 response.Message = exception.Message;
+                response.Errors = [exception.Message];
                 
                 _logger.LogWarning("Not found for request {Path}: {Message}", context.Request.Path, exception.Message);
                 break;
@@ -96,6 +100,7 @@ public class ExceptionMiddleware
                 context.Response.StatusCode = StatusCodes.Status409Conflict;
                 response.StatusCode = context.Response.StatusCode;
                 response.Message = exception.Message;
+                response.Errors = [exception.Message];
                 
                 _logger.LogWarning("Conflict for request {Path}: {Message}", context.Request.Path, exception.Message);
                 break;

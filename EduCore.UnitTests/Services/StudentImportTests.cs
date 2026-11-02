@@ -181,6 +181,9 @@ public class StudentImportTests
         Assert.Equal(1, response.SuccessfulRows);
         Assert.Equal(0, response.FailedRows);
         harness.UserManager.Verify(x => x.CreateAsync(It.IsAny<ApplicationUser>(), "Temporary-123"), Times.Once);
+        harness.UserManager.Verify(
+            x => x.CreateAsync(It.Is<ApplicationUser>(user => user.MustChangePassword), "Temporary-123"),
+            Times.Once);
         harness.UserManager.Verify(x => x.AddToRoleAsync(It.IsAny<ApplicationUser>(), Roles.Student), Times.Once);
         harness.StudentRepository.Verify(x => x.AddAsync(It.IsAny<Student>(), It.IsAny<CancellationToken>()), Times.Once);
         harness.UnitOfWork.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);

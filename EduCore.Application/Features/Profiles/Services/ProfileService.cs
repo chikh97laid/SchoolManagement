@@ -68,6 +68,18 @@ public class ProfileService : IProfileService
             var firstErrorCode = result.Errors.First().Code;
             throw new BadRequestException($"IDENTITY_{firstErrorCode.ToUpper()}");
         }
+
+        if (user.MustChangePassword)
+        {
+            user.MustChangePassword = false;
+            var updateResult = await _userManager.UpdateAsync(user);
+
+            if (!updateResult.Succeeded)
+            {
+                var firstErrorCode = updateResult.Errors.First().Code;
+                throw new BadRequestException($"IDENTITY_{firstErrorCode.ToUpper()}");
+            }
+        }
     }
 
     private async Task<ApplicationUser> GetCurrentUserAsync()
@@ -103,6 +115,7 @@ public class ProfileService : IProfileService
             FirstName = user.FirstName,
             LastName = user.LastName,
             IsActive = user.IsActive,
+            MustChangePassword = user.MustChangePassword,
             CreatedAt = user.CreatedAt,
             Roles = roles
         };

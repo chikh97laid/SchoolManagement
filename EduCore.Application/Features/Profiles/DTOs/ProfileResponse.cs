@@ -16,6 +16,8 @@ public class ProfileResponse
 
     public bool IsActive { get; set; }
 
+    public bool MustChangePassword { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public IList<string> Roles { get; set; } = [];

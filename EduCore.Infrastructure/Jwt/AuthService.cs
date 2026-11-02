@@ -58,7 +58,8 @@ public class AuthService : IAuthService
             LastName = user.LastName,
             Token = token.Token,
             Expiration = token.Expiration,
-            Roles = roles.ToList()
+            Roles = roles.ToList(),
+            MustChangePassword = user.MustChangePassword
         };
     }
 
