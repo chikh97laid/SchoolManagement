@@ -1,0 +1,1 @@
+EduCore is a .NET application built using Clean Architecture principles. The solution is organized into multiple projects, ensuring clear separation of concerns, maintainability, and scalability. It also includes Unit Tests and Integration Tests to ensure code quality, reliability, and system integrity.
